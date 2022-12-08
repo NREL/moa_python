@@ -1,0 +1,8 @@
+This case is identical to the 000 case except I follow Michael Brazell's suggestion
+and place the added line
+
+incflo.godunov_type=weno_z
+
+Setting this up at /scratch/pfleming/c2c/001_add_godunov
+
+
