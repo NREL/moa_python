@@ -10,13 +10,14 @@ AMR Wind code: https://github.com/Exawind/amr-wind
 2. Git clone the AMR wind code (git clone --recursive https://github.com/Exawind/amr-wind)- Also brings in the submodules
 	If you did not do the --recursive option, can also use (git submodule update --init, git submodule update)
 3. In the new amr-wind folder, make a build directory (ex: mkdir build) and enter build directory (ex: cd build)
-4. load modules that you need (cat buildme.sh) build cmake file - gives you build options Does Not Come With Code
-	module purge 
-	module use /nopt/nrel/apps/modules/default/modulefiles
-	module use helics/helics-3.1.0_openmpi
-	module use cmake
-	modlue use netcdf-c/4.7.3/gcc-mpi
+4. load modules that you need and build cmake file - gives you build options Does Not Come With Code
+	Need the following modules:   /nopt/nrel/apps/modules/default/modulefiles
+                                    helics/helics-3.1.0_openmpi
+                                    cmake
+                                    netcdf-c/4.7.3/gcc-mpi
+      Can load manually (module load [module name]), or use a script, shown below
 
+To make buildme.sh file, start by (vim buildme.sh), then copy the contents of the file, shwon below between the """ markers
 Contents of buildme.sh file - you have to make yourself (NOTE: DEPENDENT ON SPECIFIC COMPUTER CLUSTER MODULE PATHS):
 """
 module purge
@@ -46,12 +47,8 @@ cmake -DAMR_WIND_ENABLE_CUDA:BOOL=OFF \
 
 nice make -j16
 """
-(Misha notes building just a matter of:
 
-chmod +x buildme.sh
-./builme.sh
-
-5. Run buildme.sh file to get make file
+5. Run buildme.sh file to get make file - may need to change permissions (chmod +x buildme.sh) then run (./buildme.sh)
 6. Then type (ex: make) and it compiles the code
 
 Can compile consicutively, don't have to remove anything
