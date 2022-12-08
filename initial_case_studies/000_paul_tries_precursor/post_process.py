@@ -5,7 +5,7 @@ import netCDF4 as ncdf
 import pandas as pd
 
 def plot_stuff(field):
-  d1 = ncdf.Dataset("your_directory/abl_statistics00000.nc")
+	d1 = ncdf.Dataset("your_directory/abl_statistics00000.nc")
 
 	g1 = d1.groups["mean_profiles"]
 
