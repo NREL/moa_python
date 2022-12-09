@@ -1,0 +1,8 @@
+feather-format
+matplotlib
+numpy
+pandas>=1.5
+pytest
+seaborn
+netCDF4
+jupyter
