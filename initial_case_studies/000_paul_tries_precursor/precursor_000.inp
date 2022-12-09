@@ -49,9 +49,11 @@ ABL.surface_roughness_z0 = 0.01
 ABL.bndry_file = "bndry_files"
 ABL.bndry_io_mode = 0
 ABL.bndry_planes = ylo xlo
-ABL.bndry_output_start_time = 2.0
+ABL.bndry_output_start_time = 18000.0 # changed this to start outputting at 5 hrs or 5*60*60=18000.0s
 ABL.bndry_var_names = velocity temperature
 ABL.bndry_output_format = native
+ABL.stats_output_frequency = 1                   
+ABL.stats_output_format = netcdf  
 #¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨#
 #        ADAPTIVE MESH REFINEMENT       #
 #.......................................#
