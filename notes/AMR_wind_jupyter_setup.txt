@@ -7,4 +7,6 @@ How to set up Jupyter notebooks environment on EAGLE for post processing:
 
 3. Activate that environment and pip install moa_python
 
-4. Create a kernel for Jupyter notebooks from this environment (Steps 3-4) from this page: https://www.nrel.gov/hpc/jupyterhub.html
+4. Install any other packages necessary for the computations you wish to do
+
+5. Create a kernel for Jupyter notebooks from this environment (Steps 3-4) from this page: https://www.nrel.gov/hpc/jupyterhub.html
