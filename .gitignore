@@ -1,5 +1,5 @@
 # AMR-Wind output folders and files
-bndry_files/
+bndry_files*/
 plt*/
 chk*/
 post_processing/
