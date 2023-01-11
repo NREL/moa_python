@@ -1,3 +1,4 @@
+#!/bin/bash -l
 module purge
 module use /nopt/nrel/apps/modules/default/modulefiles
 module load helics/helics-3.1.0_openmpi

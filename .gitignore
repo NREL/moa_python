@@ -1,3 +1,9 @@
+# AMR-Wind output folders and files
+bndry_files*/
+plt*/
+chk*/
+post_processing/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
