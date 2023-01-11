@@ -1,0 +1,32 @@
+#!/bin/bash
+#SBATCH --ntasks=1
+#SBATCH --time=12:00:00
+#SBATCH --account=hfm
+
+startTime=43200
+backUpDir=/projects/hfm/churchfield/GABLS/amr-wind/
+case=run.512x512x512.4096core.Smagorinsky.wenoz
+
+pltBackUp=("576000" "460800")
+chkBackUp=("460800")
+
+
+
+# rsync data to the backup location
+rsync -aPv ./ --exclude="plt*" --exclude="chk*" $backUpDir/$case
+
+# Copy any plt or chk directories
+for i in ${pltBackUp[*]}; do
+     rsync -aPv ./plt$i $backUpDir/$case
+done
+
+for i in ${chkBackUp[*]}; do
+     rsync -aPv ./chk$i $backUpDir/$case
+done
+
+
+
+
+cd $backUpDir
+chgrp hfm -R $case
+chmod 775 -R $case
