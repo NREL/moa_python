@@ -1,0 +1,26 @@
+In this case, attempting to run a first precursor based on the example from Michael Brazel
+
+Following instructions in the notes, Paul built AMR-Wind here:
+
+/projects/ssc/amr-wind/amr-wind and built successfully
+
+Following MB's example should be an example precursor example that can be copied here:
+
+/projects/ssc/amr-wind/amr-wind/test/test_files/abl_bndry_output_native/abl_bndry_output_native.inp
+
+Indeed there is, copying that into dont_use_original_input.inp
+
+Based on this building up precusor_000.inp (for now mostly just changing the run time to be longer)
+
+Next need some sort of runscript so guessing at one from previous work and our notes as a first try in runscript
+
+Setting this up at /scratch/pfleming/c2c/000_paul_tries_precusor
+
+[pfleming@el1 000_paul_tries_precusor]$ pwd
+/scratch/pfleming/c2c/000_paul_tries_precusor
+[pfleming@el1 000_paul_tries_precusor]$ ls
+precursor_000.inp  runscript
+[pfleming@el1 000_paul_tries_precusor]$
+
+... first test submit
+sbatch runscript
