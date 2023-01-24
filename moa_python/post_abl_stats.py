@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import netCDF4 as ncdf
 
 
-class Abl_stats:
+class Post_abl_stats:
     
     def __init__(self, filenames):
         
