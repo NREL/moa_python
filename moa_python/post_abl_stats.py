@@ -155,6 +155,25 @@ class Post_abl_stats:
         
         # Perform the average and return
         return np.mean(x[t_min_idx:t_max_idx],axis=0)
+
+    def get_wind_direction_at_heights(self, t_min=None, t_max=None):
+        """ 
+        Get the wind direction at every height over averaging window [t_min, t_max]
+
+        Args in:
+            t_min (float): time to start averaging (inclusive)
+            t_max (float): time to stop averaging (non-inclusive)
+        """
+
+        u = self.get_data_from_mean_profiles('u')
+        u_avg = self.time_average_data(u, t_min, t_max)
+
+        v = self.get_data_from_mean_profiles('v')
+        v_avg = self.time_average_data(v, t_min, t_max)
+
+        self.wd_rad = np.arctan2(v_avg, u_avg) # Defined so 0 positive along x-axis
+        self.wd_deg = (270.0 - np.degrees(self.wd_rad)) % 360. # Compass
+
     
     def plot_vert_vel_profile(self, t_min=None, t_max=None, ax=None):
         """
@@ -180,6 +199,30 @@ class Post_abl_stats:
         ax.set_xlim([0, xmax])
         ax.grid(True)
         
+    def plot_vert_temp_profile(self, t_min=None, t_max=None, ax=None):
+        """
+        Plot the vertical temperature profile over an averaging
+        period of [t_min, t_max]
+
+        Args in:
+            t_min (float): time to start averaging (inclusive)
+            t_max (float): time to stop averaging (non-inclusive)
+            ax (:py:class:'matplotlib.pyplot.axes', optional):
+                figure axes. Defaults to None.
+        """
+        if ax is None:
+            fig, ax = plt.subplots()
+            
+        u = self.get_data_from_mean_profiles('theta')
+        u_avg = self.time_average_data(u, t_min, t_max)
+        
+        ax.plot(u_avg, self.z)
+        ax.set_xlabel("Temp (K)")
+        ax.set_ylabel("Height [m]")
+        # xmax = (np.max(u_avg)+1)
+        # ax.set_xlim([0, xmax])
+        ax.grid(True)
+
     def get_time_series_at_height(self, variable, height):
         """
         Return the values of a variable within the mean_profiles for a specific height
