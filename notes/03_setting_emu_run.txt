@@ -1,0 +1,4 @@
+###############  Setting up an emu run #####################
+
+1. Set up a new folder in scratch to run in
+2. Select the precursor to run against
