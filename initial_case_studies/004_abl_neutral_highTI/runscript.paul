@@ -12,6 +12,6 @@ module load netcdf-c/4.7.3/gcc-mpi
 
 echo "Starting AMR-Wind job at: " $(date)
 
-mpirun -n 540 /projects/ssc/amr-wind/amr-wind/build/amr_wind precursor_004.inp
+mpirun -n 540 /home/pfleming/amr-wind/build/amr_wind precursor_004.inp
 
 echo "Finished AMR-Wind job at: " $(date)
