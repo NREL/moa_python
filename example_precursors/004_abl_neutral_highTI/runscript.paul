@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --ntasks=540
-#SBATCH --time=0-23:00:00
+#SBATCH --time=0-8:00:00
 #SBATCH --account=ssc
 #SBATCH --mail-user=paul.fleming@nrel.gov
 #SBATCH --mail-type=ALL
