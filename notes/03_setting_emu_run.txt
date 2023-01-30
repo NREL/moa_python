@@ -4,6 +4,9 @@
 2. Select the precursor to run against
 3. Copy out the input from that precursor into your running folder
 
+
+Might need to turn off ABLforcing and turn on bodyForcing  - wont work with helics otherwise
+
 Some necessary mods to the precursor input to make it an input file for running emu:
 
  - add the io restart file to the input/output block
@@ -84,3 +87,5 @@ Actuator.UniformCtDisk.yaw = 240.0
 
 Actuator.T00.base_position = 2000.0 2000.0 0.0
 Actuator.T01.base_position = 2500.0 2500.0 0.0
+
+
