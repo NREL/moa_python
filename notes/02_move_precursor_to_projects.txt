@@ -12,3 +12,8 @@ If a precursor looks good need to move off of scratch to protect it
 3. Into that folder, copy from your successful
 - the checkpoint the corresponds to your restart time
 - the boundary files
+- the precursor input files
+
+4. Open up read/write permissions to ssc at top level with
+    chmod g+rwx -R folder_name
+    chgrp ssc -R folder_name
