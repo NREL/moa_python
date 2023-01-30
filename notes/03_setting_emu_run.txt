@@ -7,6 +7,8 @@
 
 Might need to turn off ABLforcing and turn on bodyForcing  - wont work with helics otherwise
 
+turn on Actuator forcing when there are actuator "physics" and turbines in the input file
+
 Some necessary mods to the precursor input to make it an input file for running emu:
 
  - add the io restart file to the input/output block
