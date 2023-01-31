@@ -6,8 +6,16 @@
 
 
 Might need to turn off ABLforcing and turn on bodyForcing  - wont work with helics otherwise
+ -- isthis BodyForcing?
+-- or instead no bodyForce and make sure to remove ABLforcing
 
 turn on Actuator forcing when there are actuator "physics" and turbines in the input file
+
+add Actuator to incflo.physics
+
+incflo.physics = ABL Actuator
+ICNS.source_terms = BoussinesqBuoyancy CoriolisForcing ABLMeanBoussinesq ActuatorForcing BodyForcing
+
 
 Some necessary mods to the precursor input to make it an input file for running emu:
 
@@ -21,6 +29,8 @@ io.restart_file = "/projects/ssc/amr_precursors/004_abl_neutral_highTI/chk18000"
 
 -  In the physics section
  - Comment out the block of code about outputing boundary # Output boundary files
+
+! BUT KEEP THIS LINE UNCOMMENTED: ABL.bndry_var_names = velocity temperature tke
 
   -  Add some lines about reading in the boundary files
 ABL.bndry_file = "/projects/ssc/amr_precursors/004_abl_neutral_highTI/bndry_files"
