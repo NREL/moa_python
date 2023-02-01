@@ -226,7 +226,7 @@ class Post_abl_stats:
         # ax.set_xlim([0, xmax])
         ax.grid(True)
 
-    def plot_wind_measurements_at_height(self, height, axarr=None, settling_time=None):
+    def plot_wind_measurements_at_height(self, height, axarr=None, settling_time=None, label='_nolegend_'):
         """
         Plot ws, wd and the simple cartesian variables of varaiance u'u'_r, v'v'_r, w'w'_r and wind speed
 
@@ -244,9 +244,11 @@ class Post_abl_stats:
 
         ax = axarr[0]
         data = self.get_wind_speed_time_series_at_height(height)
-        ax.plot(self.time, data)
+        ax.plot(self.time, data, label=label)
         ax.set_title('Wind Speed')
         ax.grid(True)
+        if not label =='_nolegend_':
+            ax.legend()
 
         ax = axarr[1]
         data = self.get_wind_direction_time_series_at_height(height)
