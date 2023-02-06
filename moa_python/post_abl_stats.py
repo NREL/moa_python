@@ -2,6 +2,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import netCDF4 as ncdf
+import textwrap
 
 
 class Post_abl_stats:
@@ -328,6 +329,57 @@ class Post_abl_stats:
 
         return wd_deg
         
+    def calc_forcing_stats(self, t_min, t_max):
+        # """Examine statistics file and calculate relevant quantities """
+        
+        """
+        Averages the abl forcing over time period [t_min, t_max)
+
+        Args in:
+            t_min (float): time to start averaging (inclusive)
+                if None, defaults to self.time[0]
+            t_max (float): time to stop averaging (non-inclusive)
+                if None, defaults to self.time[-1]
+
+        Args out:
+            data (class 'numpy.ndarray'): time averaged data
+        """
+        
+        # Set defaults
+        if t_min is None:
+            t_min = self.time[0]
+        if t_max is None:
+            t_max = self.time[-1]
+            
+        # Check for out of bounds
+        if t_min < self.time[0]:
+            raise ValueError(f'T_min ({t_min}) is less than the minimum time ({self.time[0]})')
+        if t_max > self.time[-1]:
+            raise ValueError(f'T_max ({t_max}) is greater than the maximum time ({self.time[-1]})')
+
+        # Find time indices within time
+        t_min_idx = np.argmax(self.time >= t_min)
+        t_max_idx = np.argmax(self.time >= t_max)
+
+        self.abl_force_x = np.average(self.get_variable_from_abl_stats('abl_forcing_x')[t_min_idx:t_max_idx])
+        self.abl_force_y = np.average(self.get_variable_from_abl_stats('abl_forcing_y')[t_min_idx:t_max_idx])
+
+        ##### TODO: Ask whether mean temperature profile is needed for BoussinesqBuoyancy input??
+        #    - not in Lawrence's answer, but in Alex/Ghanesh's code 
+        #####
+        # h = self.dset['mean_profiles']['h'][:]
+        # avg_theta = np.average(mean_profiles['theta'][t_filter, :], 0)
+        # with open('avg_theta.dat','w') as f:
+        #     f.write('{} \n'.format(avg_theta.size))
+        #     for i,t in enumerate(avg_theta):
+        #         f.write('{} {} \n'.format(h[i], t))
+
+        print(textwrap.dedent(f"""                 
+        Desired start time   = {str(t_min)} 
+        Desired end time     = {str(t_max)}   
+        abl_forcing_x        = {str(self.abl_force_x)}  
+        abl_forcing_y        = {str(self.abl_force_y)}    
+        """))
         
 
     

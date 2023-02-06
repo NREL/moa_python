@@ -14,8 +14,11 @@
   - Update incflo.physics to include Actuator
     - Should now look like: incflo.physics = ABL Actuator
   - Update ICNS.source_terms (remove ABLforcing, add ActuatorForcing)
-    - Should now look like: ICNS.source_terms = BoussinesqBuoyancy CoriolisForcing ABLMeanBoussinesq ActuatorForcing
-  - Note there is now (Feb 1 2023 some debate on using bodyForcing)
+    - Should now look like: ICNS.source_terms = BoussinesqBuoyancy CoriolisForcing ABLMeanBoussinesq ActuatorForcing BodyForce
+  - Note there is now (Feb 1 2023 some debate on using bodyForcing) - decided we should add BodyForce
+  - Update body forcing parameters using values calculated from calc_forcing_stats (post processing notebook 04)
+      BodyForce.magnitude  = [abl_forcing_x] [abl_forcing_y] 0.0
+  - Question of which wall shear stress to use (previously 'local', but some discussion on what it should be - suggested to be Moeng)
 
 - Boundary files
   - Want to switch from outputting boundary files to reading in boundary files
