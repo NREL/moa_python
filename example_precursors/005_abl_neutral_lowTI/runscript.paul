@@ -1,6 +1,6 @@
 #!/bin/bash
-#SBATCH --ntasks=180
-#SBATCH --time=0-23:00:00
+#SBATCH --ntasks=540
+#SBATCH --time=0-8:00:00
 #SBATCH --account=ssc
 #SBATCH --mail-user=paul.fleming@nrel.gov
 #SBATCH --mail-type=ALL
@@ -12,6 +12,6 @@ module load netcdf-c/4.7.3/gcc-mpi
 
 echo "Starting AMR-Wind job at: " $(date)
 
-mpirun -n 180 /projects/ssc/amr-wind/amr-wind/build/amr_wind precursor_001.inp
+mpirun -n 540 /home/pfleming/amr-wind/build/amr_wind precursor_005.inp
 
 echo "Finished AMR-Wind job at: " $(date)

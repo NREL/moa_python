@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import netCDF4 as ncdf
 
 
-class Abl_stats:
+class Post_abl_stats:
     
     def __init__(self, filenames):
         
@@ -34,6 +34,9 @@ class Abl_stats:
         self.summary()
         
     def summary(self):
+        """
+        Print out a brief summary of abl_stats file
+        """
         
         print(f"Object is composed of {self.Nfiles} and time runs from {self.time[0]} to {self.time[-1]}")
         print(self.dataset_list[0])
@@ -155,8 +158,27 @@ class Abl_stats:
         
         # Perform the average and return
         return np.mean(x[t_min_idx:t_max_idx],axis=0)
+
+    def get_mean_wind_direction_at_heights(self, t_min=None, t_max=None):
+        """ 
+        Get the wind direction at every height over averaging window [t_min, t_max]
+
+        Args in:
+            t_min (float): time to start averaging (inclusive)
+            t_max (float): time to stop averaging (non-inclusive)
+        """
+
+        u = self.get_data_from_mean_profiles('u')
+        u_avg = self.time_average_data(u, t_min, t_max)
+
+        v = self.get_data_from_mean_profiles('v')
+        v_avg = self.time_average_data(v, t_min, t_max)
+
+        self.wd_rad = np.arctan2(v_avg, u_avg) # Defined so 0 positive along x-axis
+        self.wd_deg = (270.0 - np.degrees(self.wd_rad)) % 360. # Compass
+
     
-    def plot_vert_vel_profile(self, t_min=None, t_max=None, ax=None):
+    def plot_vertical_vel_profile(self, t_min=None, t_max=None, ax=None):
         """
         Plot the vertical velocity profile over an averaging
         period of [t_min, t_max]
@@ -180,6 +202,74 @@ class Abl_stats:
         ax.set_xlim([0, xmax])
         ax.grid(True)
         
+    def plot_vertical_temp_profile(self, t_min=None, t_max=None, ax=None):
+        """
+        Plot the vertical temperature profile over an averaging
+        period of [t_min, t_max]
+
+        Args in:
+            t_min (float): time to start averaging (inclusive)
+            t_max (float): time to stop averaging (non-inclusive)
+            ax (:py:class:'matplotlib.pyplot.axes', optional):
+                figure axes. Defaults to None.
+        """
+        if ax is None:
+            fig, ax = plt.subplots()
+            
+        u = self.get_data_from_mean_profiles('theta')
+        u_avg = self.time_average_data(u, t_min, t_max)
+        
+        ax.plot(u_avg, self.z)
+        ax.set_xlabel("Temp (K)")
+        ax.set_ylabel("Height [m]")
+        # xmax = (np.max(u_avg)+1)
+        # ax.set_xlim([0, xmax])
+        ax.grid(True)
+
+    def plot_wind_measurements_at_height(self, height, axarr=None, settling_time=None, label='_nolegend_'):
+        """
+        Plot ws, wd and the simple cartesian variables of varaiance u'u'_r, v'v'_r, w'w'_r and wind speed
+
+        Args in:
+            height (float): the height to extract, if not a value of self.z, will use nearest
+            axarr (list?): an array of axis
+            settling_time (float): An option value that indicates a proposed setting time
+
+        Args out:
+            axarr (list?): an array of axis
+        """
+
+        if axarr is None:
+            fig, axarr = plt.subplots(5,1,figsize=(15,10), sharex=True)
+
+        ax = axarr[0]
+        data = self.get_wind_speed_time_series_at_height(height)
+        ax.plot(self.time, data, label=label)
+        ax.set_title('Wind Speed')
+        ax.grid(True)
+        if not label =='_nolegend_':
+            ax.legend()
+
+        ax = axarr[1]
+        data = self.get_wind_direction_time_series_at_height(height)
+        ax.plot(self.time, data)
+        ax.set_title('Wind Direction')
+        ax.grid(True)
+
+        for sig, ax in zip(["u'u'_r","v'v'_r","w'w'_r"], axarr[2:]):
+
+            data = self.get_time_series_at_height(sig, height)
+            ax.plot(self.time, data)
+            ax.set_title(sig)
+            
+            ax.grid(True)
+
+        axarr[-1].set_xlabel('Time (s)')
+
+        if settling_time is not None:
+            for ax in axarr:
+                ax.axvline(settling_time, color='r', ls='--')
+
     def get_time_series_at_height(self, variable, height):
         """
         Return the values of a variable within the mean_profiles for a specific height
@@ -202,6 +292,41 @@ class Abl_stats:
         # Return at height
         return np.squeeze(x[:,h_idx])
     
+
+    def get_wind_speed_time_series_at_height(self, height):
+        """
+        Return the magnitude wind speed as a time series
+
+        Args in:
+            height (float): the height to extract, if not a value of self.z, will use nearest
+
+        Args out:
+            u (class 'numpy.ndarray'): wind speed magnitude over time
+        """
+
+        u = self.get_time_series_at_height('u', height)
+        v = self.get_time_series_at_height('v', height)
+
+        return np.sqrt(u**2 + v**2)
+
+    def get_wind_direction_time_series_at_height(self, height):
+        """
+        Return the wind direction (compass) as a time series
+
+        Args in:
+            height (float): the height to extract, if not a value of self.z, will use nearest
+
+        Args out:
+            wd_deg (class 'numpy.ndarray'): compass wind direction in degrees
+        """
+
+        u = self.get_time_series_at_height('u', height)
+        v = self.get_time_series_at_height('v', height)
+
+        wd_rad = np.arctan2(v, u) # Defined so 0 positive along x-axis
+        wd_deg = (270.0 - np.degrees(wd_rad)) % 360. # Compass
+
+        return wd_deg
         
         
 
