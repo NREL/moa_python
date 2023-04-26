@@ -327,8 +327,70 @@ class Post_abl_stats:
         wd_deg = (270.0 - np.degrees(wd_rad)) % 360. # Compass
 
         return wd_deg
-        
-        
 
-    
+    def get_turbulence_intensity_at_height(self, height, t_min=None, t_max=None):
+
+        """ 
+        Get the turbulence intensity at prescribed height over averaging window [t_min, t_max]
+
+        Args in:
+            height (float): domain height (or nearest domain cell value to height) at which the TI is calculated
+            t_min  (float): time to start averaging (inclusive)
+            t_max  (float): time to stop averaging (non-inclusive)
+        """
+
+        u = self.get_time_series_at_height('u', height)
+        u_avg = self.time_average_data(u, t_min, t_max)
+
+        v = self.get_time_series_at_height('v', height)
+        v_avg = self.time_average_data(v, t_min, t_max)
+
+        w = self.get_time_series_at_height('w', height)
+        w_avg = self.time_average_data(w, t_min, t_max)
+
+        vel_mag_avg = np.sqrt(u_avg**2 + v_avg**2 + w_avg**2)
+
+        uu = self.get_time_series_at_height("u'u'_r", height)
+        uu_avg = self.time_average_data(uu, t_min, t_max)
+
+        vv = self.get_time_series_at_height("v'v'_r", height)
+        vv_avg = self.time_average_data(vv, t_min, t_max)
+
+        ww = self.get_time_series_at_height("w'w'_r", height)
+        ww_avg = self.time_average_data(ww, t_min, t_max)
+
+        tke = 0.5*(uu_avg + vv_avg + ww_avg)
+        TI = np.sqrt(2.0/3.0*tke)/vel_mag_avg
+
+
+        return TI*100
+
+    def plot_turbulence_intensity_profile(self, t_min=None, t_max=None, ax=None):
+
+        """
+        Plot the turbulence intensity profile over an averaging
+        period of [t_min, t_max]
+
+        Args in:
+            t_min (float): time to start averaging (inclusive)
+            t_max (float): time to stop averaging (non-inclusive)
+            ax (:py:class:'matplotlib.pyplot.axes', optional):
+                figure axes. Defaults to None.
+        """
+        if ax is None:
+            fig, ax = plt.subplots()
+            
+        Nh = len(self.z)
+        TI = np.zeros((Nh))
+
+        for i in range(0,Nh):
+            TI[i] = self.get_turbulence_intensity_at_height(self.z[i])
+
+        ax.plot(TI, self.z)
+        ax.set_xlabel("TI %")
+        ax.set_ylabel("Height [m]")
+        xmax = (np.max(TI)+1)
+        ax.set_xlim([0, xmax])
+        ax.grid(True)
+            
         
