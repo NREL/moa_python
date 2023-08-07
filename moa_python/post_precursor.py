@@ -440,12 +440,14 @@ class Post_precursor:
         ## Variable already exists multiple times
         if delete:
             if len(line) > 0:
-                return line
-            else:    
                 for n in reversed(line):
                     del self.input_file[n]
-                if len(line)>1: return line[0]
-                else: return line
+                return line[0]
+            elif len(line) == 1:
+                del self.input_file[line[0]]
+                return line
+            else:
+                return line
         elif variable_value is None:
             if len(line) == 0: return line
             else: return line[-1]
@@ -488,23 +490,23 @@ class Post_precursor:
             self.read_input_file()
 
         ## Delete existing sampling
-        check = self.find_line("sampling", delete=True)
-        if isinstance(check, list) and len(check) > 0:
-            print("Warning: Existing sampling found. Make sure to delete these manually if not desired!")
-            #### TO DO: FIND A WAY TO REMOVE OLD SAMPLING. IDEA: LOOK FOR THE TAGS AND THEN SEARCH AND DELETE THESE TAGS
-            line_idx = check
+        line_idx = self.find_line("incflo.post_processing")
+        if isinstance(line_idx, int):
+            print("Warning: Existing sampling found. These will be removed from file!")
+            sampling_labels = self.input_file[line_idx].split()[2:]
+            for sampling_label in sampling_labels:
+                self.find_line(sampling_label,delete=True)
         else:
             line_idx = len(self.input_file)+1
 
         ## Add sampling text box
         line_idx = self.find_line("SAMPLING")
-        if isinstance(line_idx, list):
-            line_idx = line_idx[-1] + 2
+        if isinstance(line_idx, int):
+            line_idx = line_idx + 2
         else:
-            self.input_file.insert(len(self.input_file)+1, "#¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨#\n\
-                                                            #                SAMPLING               #\n\
-                                                            #.......................................#")
-            line_idx = len(self.input_file)
+            self.input_file.insert(len(self.input_file)+1, \
+            "#¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨#\n#                SAMPLING               #\n#.......................................#\n")
+            line_idx = len(self.input_file)+3
 
         ## Add sampling tag names
         self.find_line("incflo.post_processing", list(self.sampling.keys()), line_idx)
@@ -550,13 +552,12 @@ class Post_precursor:
 
         ## Add refinement text box
         line_idx = self.find_line(" REFINEMENT ")
-        if isinstance(line_idx, list):
-            line_idx = line_idx[-1] + 2
+        if isinstance(line_idx, int):
+            line_idx = line_idx + 2
         else:
-            self.input_file.insert(len(self.input_file)+1, "#¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨#\n\
-                                                            #        ADAPTIVE MESH REFINEMENT       #\n\
-                                                            #.......................................#")
-            line_idx = len(self.input_file)
+            self.input_file.insert(len(self.input_file)+1,\
+            "#¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨#\n#        ADAPTIVE MESH REFINEMENT       #\n#.......................................#\n")
+            line_idx = len(self.input_file)+3
 
         ## Add max refinement level
         level_line = self.find_line("amr.max_level")
@@ -587,36 +588,36 @@ class Post_precursor:
         elif write_file: print("Warning: no restart input file name defined. Runtime stats not written to file. Use 'write_input_file' to create or alter restart input file.")
 
 
-    def apply_turbine(self, label, openfast_input_file=None, position=None, turb_type="TurbineFastLine", **kwargs):
+    def apply_actuator(self, label, openfast_input_file=None, position=None, act_type="TurbineFastLine", **kwargs):
         """
-        Add a turbine to the input file.
+        Add an actuator to the input file.
         Args in:
             label (str)
             type (str)
             **kwargs
         """
 
-        if not hasattr(self,'turbine_labels'): self.turbine_labels = [label]
-        elif label in self.turbine_labels: 
-            print(f"Warning: Turbine label {label} already used. Existing turbines will be overwritten.")
-            self.turbines = {}
-        else: self.turbine_labels.append(label)
-        self.turbines = {"label": self.turbine_labels,
-                         "type": turb_type}
-        if position is None: position = self.turb_loc
-        self.turbines[label] = {"base_position": position}
-        if openfast_input_file is not None: self.turbines[label]["openfast_input_file"] = openfast_input_file
+        if not hasattr(self,'act_labels'): self.act_labels = [label]
+        elif label in self.act_labels: 
+            print(f"Warning: Actuator label {label} already used. Existing actuators will be overwritten.")
+            self.actuators = {}
+        else: self.act_labels.append(label)
+        self.actuators = {"labels": self.act_labels,
+                         "type": act_type}
+        if position is None: position = np.round(self.turb_loc*self.rot_diam,1)
+        self.actuators[label] = {"base_position": position}
+        if openfast_input_file is not None: self.actuators[label]["openfast_input_file"] = openfast_input_file
         ## TO DO: AUTOMIZE THE INPUTS NEEDED IN AMR-WIND BY FINDING THEM FROM OPENFAST INPUT FILES
-        if not hasattr(self.turbines,turb_type): self.turbines[turb_type] = {}
+        if not hasattr(self.actuators,act_type): self.actuators[act_type] = {}
         for key, value in kwargs.items():
-            self.turbines[turb_type][key] = value
+            self.actuators[act_type][key] = value
 
 
-    def add_turbines(self, write_file=False):
+    def add_actuators(self, write_file=False):
 
-        ## Check whether turbines are defined
-        if (not hasattr(self,"turbines")) or (len(self.turbines) == 0):
-            sys.exit(f"No turbines found. First run a turbines function.")
+        ## Check whether actuators are defined
+        if (not hasattr(self,"actuators")) or (len(self.actuators) == 0):
+            sys.exit(f"No actuators found. First run an actuators function first.")
 
         ## Read input file
         if not hasattr(self,"input_file"):
@@ -636,48 +637,53 @@ class Post_precursor:
         elif not "ActuatorForcing" in self.input_file[source_line]:
             self.input_file[source_line] = self.input_file[source_line] + ' ' + 'ActuatorForcing'
 
-        # Delete existing turbine lines
+        # Delete existing actuator lines
         check = self.find_line("Actuator.", delete=True)
         if len(check)>0:
-            print("Warning: Existing turbine(s) found. These lines will be overwritten!")
+            print("Warning: Existing actuator(s) found. These lines will be overwritten!")
             line_idx = check
         else:
-            line_idx = self.find_line(" TURBINE ")
-            if len(line_idx) == 0: line_idx = len(self.input_file)+1
+            line_idx = self.find_line(" ACTUATORS ")
 
-        ## Add turbines text box
-        if not isinstance(line_idx, list):
+        ## Add actuators text box
+        if len(line_idx) > 0:
             line_idx = line_idx + 2
         else:
-            self.input_file.insert(line_idx, "#¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨#\n\
-                                              #                TURBINES               #\n\
-                                              #.......................................#")
-            line_idx = len(self.input_file)
+            self.input_file.insert(len(self.input_file)+1,\
+            "#¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨#\n#               ACTUATORS               #\n#.......................................#\n")
+            line_idx = len(self.input_file)+3
 
-        ## Add turbine type and label
-        if hasattr(self,"turbine_labels"):
-            self.turbine_labels = self.turbines['label']
+        ## Add actuator type and label
+        if hasattr(self,"act_labels"):
+            self.act_labels = self.actuators['labels']
         else:
-            self.turbine_labels = self.turbine_labels.append(self.turbines['label'])
-        self.input_file.insert(line_idx+1,format_variable_to_string("Actuator.labels", self.turbine_labels))
+            self.act_labels = self.act_labels.append(self.actuators['labels'])
+        self.input_file.insert(line_idx+1,format_variable_to_string("Actuator.labels", self.act_labels))
 
-        ## Add turbines to file
-        for turbine_name, turbine_dict in self.turbines.items():
-            if isinstance(turbine_dict,dict):
-                for sub_name, sub_dict in turbine_dict.items():
+        ## Add actuators to file
+        for act_name, act_dict in self.actuators.items():
+            if not isinstance(act_dict,dict):
+                self.find_line("Actuator."+act_name, act_dict, line_idx)
+            else:
+                for sub_name, sub_dict in act_dict.items():
                     if isinstance(sub_dict,dict):
                         self.alter_dict_variables(sub_dict, line_idx)
                     else:
-                        self.find_line("Actuator."+turbine_name+"."+sub_name, sub_dict, line_idx)     
+                        self.find_line("Actuator."+act_name+"."+sub_name, sub_dict, line_idx)     
                         line_idx += 1
-            else:
-                self.find_line("Actuator."+turbine_name, turbine_dict, line_idx)
             self.input_file.insert(line_idx,'')
             line_idx += 1
+        self.input_file.insert(line_idx,'')
 
         if write_file and (self.restart_input_filename is not None): self.write_input_file()
         elif write_file: print("Warning: no restart input file name defined. Runtime stats not written to file. Use 'write_input_file' to create or alter restart input file.")
                 
+
+    def copy_actuator_input(self,act_input_file):
+        """
+        WIP: Allow for an actuator to be copied from an existing AMR input file.
+        """
+
 
     def generate_restart_input_file(self, write_file=True, **kwargs):
         """
@@ -689,9 +695,9 @@ class Post_precursor:
         ## ADD ABL STATS
         self.add_runtime_stats(write_file=False)
 
-        ## ADD TURBINES (IF DEFINED) - NOT WORKING YET
-        # if (hasattr(self,"turbines")) or (len(self.turbines) > 0):
-        #     self.add_turbines(write_file=False)
+        ## ADD ACTUATORS (IF DEFINED) - NOT WORKING YET
+        if (hasattr(self,"actuators")) or (len(self.actuators) > 0):
+            self.add_actuators(write_file=False)
 
         ## ADD SAMPLING (IF DEFINED)
         if (hasattr(self,"sampling")) or (len(self.sampling) > 0):
