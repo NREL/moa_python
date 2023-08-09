@@ -433,7 +433,9 @@ class Post_precursor:
     def find_line(self, variable_name, variable_value=None, line_idx=None, delete=False):
         """
         Function that looks if variable already exists in the input file.
-        If a variable value is defined, given variable is added to or altered in the input file
+        If a variable value is defined, given variable is added to or altered in the input file.
+            Optional: define line_idx to set where to add variable. Otherwise it will be added to EoF.
+        If delete is set to True, given variable will be deleted from the file.
         """
 
         line = [idx for idx, curr_line in enumerate(self.input_file) if variable_name in curr_line]
@@ -442,7 +444,7 @@ class Post_precursor:
             if len(line) > 0:
                 for n in reversed(line):
                     del self.input_file[n]
-                return line[0]
+                return line
             elif len(line) == 1:
                 del self.input_file[line[0]]
                 return line
@@ -610,7 +612,11 @@ class Post_precursor:
         ## TO DO: AUTOMIZE THE INPUTS NEEDED IN AMR-WIND BY FINDING THEM FROM OPENFAST INPUT FILES
         if not hasattr(self.actuators,act_type): self.actuators[act_type] = {}
         for key, value in kwargs.items():
-            self.actuators[act_type][key] = value
+            if isinstance(value, dict):
+                for key2, value2 in value.items():
+                    self.actuators[act_type][key2] = value2
+            else:
+                self.actuators[act_type][key] = value
 
 
     def add_actuators(self, write_file=False):

@@ -30,7 +30,7 @@ class Post_abl_stats:
         # Save the z-levels
         self.z = self.get_data_from_mean_profiles('h')
         
-        # Print a quick summar
+        # Print a quick summary
         self.summary()
         
     def summary(self):
