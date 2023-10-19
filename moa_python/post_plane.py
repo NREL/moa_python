@@ -2,7 +2,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import netCDF4 as ncdf
-
+from scipy.optimize import curve_fit
 
 class Post_plane:
     """
@@ -10,7 +10,7 @@ class Post_plane:
     To do for future: make it compatible for different plane groups.
     """
     
-    def __init__(self, filename, freq = 1):
+    def __init__(self, filename, freq = 1, verbose = 1, amr_origin = [0,0,0], flip = False):
         
         # Save the filename
         self.filename = filename
@@ -36,7 +36,7 @@ class Post_plane:
         self.y = np.linspace(0, self.y_max, self.y_N)
 
         # Save the number of planes 
-        self.z = self.get_plane_location()
+        self.z = self.get_plane_location(amr_origin)
         if not isinstance(self.z,np.ndarray): self.z = np.array([self.z])
         self.z_N = len(self.z)
 
@@ -48,7 +48,7 @@ class Post_plane:
         self.vel_planes['u'] = np.sqrt(self.vel_planes['x']**2 + self.vel_planes['y']**2)
         
         # Print a quick summary
-        self.summary()
+        if verbose: self.summary()
         
     def summary(self):
         """
@@ -72,7 +72,7 @@ class Post_plane:
 
         return self.z
 
-    def get_plane_index(self, z):
+    def get_plane_index(self, z, verbose = 1):
         """
         Return the nearest index to a position
         
@@ -84,11 +84,11 @@ class Post_plane:
         """
         # Identify nearest z
         z_idx = np.argmin(np.abs(self.z - z))
-        print(f'Nearest plane to {z} is {self.z[z_idx]}')
+        if verbose: print(f'Nearest plane to {z} is {self.z[z_idx]}')
 
         return z_idx
 
-    def get_time_index(self, time):
+    def get_time_index(self, time, verbose = 1):
         """
         Return the nearest time index to a time
         
@@ -100,12 +100,12 @@ class Post_plane:
         """
         # Identify nearest time
         t_idx = np.argmin(np.abs(self.time - time))
-        print(f'Nearest time to {time} is {self.time[t_idx]}')
+        if verbose: print(f'Nearest time to {time} is {self.time[t_idx]}')
 
         return t_idx
 
 
-    def get_plane(self, plane, time, component = 'u'):
+    def get_plane(self, plane, time, component = 'u', verbose = 1):
         """
         Get a plane at particular location and time
         
@@ -122,29 +122,33 @@ class Post_plane:
         z_idx = self.get_plane_index(plane)
         t_idx = self.get_time_index(time)
 
-        print(f"Returning {component} velocity plane for slice at {self.z[z_idx]} at time {self.time[t_idx]}")
+        if verbose: print(f"Returning {component} velocity plane for slice at {self.z[z_idx]} at time {self.time[t_idx]}")
 
         return self.vel_planes[component][t_idx, :][z_idx*self.x_N*self.y_N:(z_idx+1)*self.x_N*self.y_N].reshape(self.y_N,self.x_N)
 
-    def get_mean_plane(self, plane, component = 'u', axes = 'xy'):
+    def get_mean_plane(self, plane, component = 'u', timespan = None, verbose = 1):
         """
         Get the mean plane at a particular location
         
         Args in:
             plane (float): the plane location to get
             component (str): the component to get
+            axes (str): the plane axes over which to average
+            timespan (list, np.ndarray, tuple): [t0, tend], timespan over which to average
 
         Args out:
             data (not sure): the plane
         """
 
         z_idx = self.get_plane_index(plane)
-        x = getattr(self,axes[1]+'_N')
-        y = getattr(self,axes[0]+'_N')
 
-        print(f"Returning {component} mean velocity plane for slice at {self.z[z_idx]}")
+        if verbose: print(f"Returning {component} mean velocity plane for slice at {self.z[z_idx]}")
 
-        mean_plane = np.mean(self.vel_planes[component], axis=0)
+        if timespan is None:
+            timespan = [self.time[0], self.time[-1]]
+        i0 = self.get_time_index(timespan[0])
+        iend = self.get_time_index(timespan[1])
+        mean_plane = np.mean(self.vel_planes[component][i0:iend,:], axis=0)
         return mean_plane[z_idx*self.x_N*self.y_N:(z_idx+1)*self.x_N*self.y_N].reshape(self.y_N,self.x_N)
     
     def set_origin(self, **kwargs):
@@ -200,8 +204,10 @@ class Post_plane:
             self.y = self.y/rot_diam
             self.z = self.z/rot_diam
             self.unit = 'D'
+        else:
+            print('WARNING: Field already scaled to rotor diameter. Nothing happened.')
 
-    def plot_plane(self, z, time, component = 'u', ax = None, vmin=None, vmax=None):
+    def plot_plane(self, z, time, component = 'u', ax = None, vmin = None, vmax = None, verbose = 1):
         """
         Plot a plane at a particular slice and time
         
@@ -215,13 +221,14 @@ class Post_plane:
             vmax (float, optional) maximum value in colorbar
         """
 
-        print(f"Plotting {component} velocity for plane at location {z} at time {time}")
+        if verbose: print(f"Plotting {component} velocity for plane at location {z} at time {time}")
 
         plane = self.get_plane(z,time,component)
 
         if ax is None:
             fig, ax = plt.subplots()
         else:
+            print(ax)
             plt.sca(ax)
             fig = plt.gcf()
         im = ax.pcolor(self.x, self.y, plane, vmin=vmin, vmax=vmax)
@@ -234,7 +241,7 @@ class Post_plane:
 
         return ax
 
-    def plot_mean_plane(self, z, component = 'u', fig = None, ax = None, vmin=None, vmax=None):
+    def plot_mean_plane(self, z, component = 'u', fig = None, ax = None, vmin=None, vmax=None, timespan=None, verbose = 1):
         """
         Plot the mean plane at a particular height and time
         
@@ -247,9 +254,9 @@ class Post_plane:
             vmax (float, optional) maximum value in colorbar
         """
 
-        print(f"Plotting {component} mean velocity for plane at location {z}")
+        if verbose: print(f"Plotting {component} mean velocity for plane at location {z}")
 
-        plane = self.get_mean_plane(z, component)
+        plane = self.get_mean_plane(z, component, timespan=timespan)
 
         if ax is None:
             fig, ax = plt.subplots()
@@ -291,6 +298,114 @@ class Post_plane:
         elif plane == 'xz':
             ax.plot([turb_loc[0],turb_loc[0]],\
                     hub_height+[turb_loc[1]-rot_diam/2,turb_loc[1]+rot_diam/2],'k',linewidth=1.5)
+
+    def vel_in_wake(self,hub_height,rot_diam,turb_loc=[0, 0],timespan=None):
+        """
+        Calculates average velocity up/downstream of a turbine
+        
+        Args in:
+            hub_heigth (float): turbine hub height in m (default: 90)
+            rot_diam (float): turbine rotor diameter in m (default: 126)
+            turb_loc (list): x- and y- location of the turbine in m (default: [0, 0])
+        
+        Args out:
+            Utube (np.array): average wind speed in wake (dimensions: squeeze(num_time_steps, num_x_coor, num_cases) )
+        """
+        idx = np.where((self.y-turb_loc[1])**2 + (self.z-hub_height)**2 < (rot_diam/2)**2)
+        self.Uwake = self.get_mean_plane(hub_height, timespan=timespan)
+        self.Uwake_avg = np.average(self.Uwake[idx],axis=0)
+                
+        return self.Uwake_avg
+
+
+    def get_vorticity(self, plane, time, orientation = 'xy'):
+        """
+        Calculates vorticity in plane at given time
+
+        Args in:
+            plane (float): plane location
+            time (float): time to calculate vorticity at
+            orientation (str): orientation of the plane in xyz coordinates, default: xy
+        """
+
+        u = self.get_plane(plane, time, component = orientation[0])
+        v = self.get_plane(plane, time, component = orientation[1])
+        
+        return (np.diff(v,axis=1)/np.diff(self.x))[0:-1,:] - (np.diff(u,axis=0).T/np.diff(self.y)).T[:,0:-1]
+
+
+    def fit_sin(t,y):
+        t = np.array(t)
+        y = np.array(y)
+        ff = np.fft.fftfreq(len(t), (t[1]-t[0]))
+        Fyy = abs(np.fft.fft(y))
+        guess_freq = abs(ff[np.argmax(Fyy[1:])+1])
+        guess_amp = np.std(y) * 2.**0.5
+        guess_offset = np.mean(y)
+        guess = np.array([guess_amp, guess_freq, 0., guess_offset])
+
+        def sin_fun(t,A,f,ph,offset):
+            return A * np.sin(2*np.pi*f*t+ph) + offset
+        
+        popt, pcov = curve_fit(sin_fun,t,y,p0=guess)
+        A,f,ph,offset = popt
+        print(f'\
+        Amplitude:    {A}\n\
+        offset:       {offset}')
+        curve = sin_fun(t,*popt)
+        
+        return popt, curve
+
+
+    def periodic_averaging(self, signal, num_bins, period, poi=None, amplitude=None, offset=0):
+        """
+        
+        """
+
+        
+        if amplitude is not None:
+            bins = np.linspace(-amplitude+offset, amplitude+offset, num_bins)[1:-1]     
+            bin_indices = np.digitize(signal,bins)
+        else:
+            bins = np.linspace(min(signal), max(signal),num_bins)[1:-1]
+            bin_indices = np.digitize(signal,bins)
+
+        return signal_in_bins, bins
+
+
+    def plot_vorticity(self, plane, time, orientation='xy', ax=None, vmin=None, vmax=None, verbose=1):
+        """
+        Plot vorticity over a plane at a particular slice and time
+        
+        Args in:
+            plane (float): the z-coordinate of the plane to plot
+            time (float): the time to plot
+            orientation (str): orientation of the plane in xyz coordinates, default: xy
+            ax (:py:class:'matplotlib.pyplot.axes', optional):
+                figure axes. Defaults to None.
+            vmin (float, optional) minimum value in colorbar
+            vmax (float, optional) maximum value in colorbar
+        """
+
+        if verbose: print(f"Plotting vorticity for plane at location {plane} at time {time}")
+
+        vorticity = self.get_vorticity(plane,time,orientation)
+
+        if ax is None:
+            fig, ax = plt.subplots()
+        else:
+            plt.sca(ax)
+            fig = plt.gcf()
+        im = ax.pcolor(self.x[0:-1], self.y[0:-1], vorticity, vmin=vmin, vmax=vmax)
+        if not hasattr(self,'unit'): self.unit = 'm'
+        ax.set_xlabel(f'X [{self.unit}]')
+        ax.set_ylabel(f'Y [{self.unit}]')
+        ax.set_aspect('equal')
+
+        fig.colorbar(im,ax=ax,location='bottom')
+
+        return ax
+
 
 
 

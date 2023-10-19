@@ -56,7 +56,7 @@ class Post_abl_stats:
         for i in range(self.Nfiles):
             data = np.append(data,self.dataset_list[i].variables[variablename])
 
-        return data
+        return np.squeeze(np.reshape(data,[self.Nfiles, int(len(data)/self.Nfiles)]).T)
         
     def get_group_from_abl_stats(self, groupname):
         """
@@ -98,17 +98,18 @@ class Post_abl_stats:
 
             if variable in variablenames:
                 if i == 0:
-                    data = np.array(np.array(group[i].variables[variable]))
+                    data = np.array(group[i].variables[variable])
+                    N = len(data.shape)
                 else:
-                    data = np.append(data,np.array(group[i].variables[variable]),axis=0)
+                    data = np.append(data,np.array(group[i].variables[variable]),axis=N-1)
             else:
                 raise ValueError(f'The specified variable was not found in the given group. \n Available variables: {variablenames} \n Requested variable: {variable}')
+        shape = list(data.shape)+[self.Nfiles]
+        shape[N-1] = int(shape[N-1]/self.Nfiles)
 
-
-        return data
+        return np.reshape(data, shape, 'F')
     
-    def get_data_from_mean_profiles(self, variable
-    ):
+    def get_data_from_mean_profiles(self, variable):
         
         """
         Reads requested data from mean profile and returns array
@@ -142,22 +143,29 @@ class Post_abl_stats:
         
         # Set defaults
         if t_min is None:
-            t_min = self.time[0]
+            t_min = np.min(self.time)
         if t_max is None:
-            t_max = self.time[-1]
+            t_max = np.max(self.time)
             
         # Check for out of bounds
-        if t_min < self.time[0]:
-            raise ValueError(f'T_min ({t_min}) is less than the minimum time ({self.time[0]})')
-        if t_max > self.time[-1]:
-            raise ValueError(f'T_max ({t_max}) is greater than the maximum time ({self.time[-1]})')
-            
+        if t_min < np.min(self.time):
+            raise ValueError(f'T_min ({t_min}) is less than the minimum time ({np.min(self.time)})')
+        if t_max > np.max(self.time):
+            raise ValueError(f'T_max ({t_max}) is greater than the maximum time ({np.max(self.time)})')
+        
         # Find time indices within time
-        t_min_idx = np.argmax(self.time >= t_min)
-        t_max_idx = np.argmax(self.time >= t_max)
+        t_min_idx = np.argmax(self.time >= t_min, axis=0)
+        t_max_idx = np.argmax(self.time >= t_max, axis=0)
+
+        if len(t_min_idx.shape):
+            data = []
+            for n in range(len(t_min_idx)):
+                data = np.append(data,np.mean(x[t_min_idx[n]:t_max_idx[n],:,n],axis=0))
+        else:
+            data = np.mean(x[t_min_idx:t_max_idx],axis=0)
         
         # Perform the average and return
-        return np.mean(x[t_min_idx:t_max_idx],axis=0)
+        return np.reshape(data,(x.shape[1],self.Nfiles),'F')
 
     def get_mean_wind_direction_at_heights(self, t_min=None, t_max=None):
         """ 
@@ -178,7 +186,7 @@ class Post_abl_stats:
         self.wd_deg = (270.0 - np.degrees(self.wd_rad)) % 360. # Compass
 
     
-    def plot_vertical_vel_profile(self, t_min=None, t_max=None, ax=None):
+    def plot_vertical_vel_profile(self, t_min=None, t_max=None, ax=None, height=None):
         """
         Plot the vertical velocity profile over an averaging
         period of [t_min, t_max]
@@ -193,16 +201,22 @@ class Post_abl_stats:
             fig, ax = plt.subplots()
             
         u = self.get_data_from_mean_profiles('u')
+        v = self.get_data_from_mean_profiles('v')
         u_avg = self.time_average_data(u, t_min, t_max)
+        v_avg = self.time_average_data(v, t_min, t_max)
+        U_avg = np.sqrt(u_avg**2 + v_avg**2)
         
-        ax.plot(u_avg, self.z)
+        ax.plot(U_avg, self.z)
         ax.set_xlabel("U m/s")
         ax.set_ylabel("Height [m]")
-        xmax = (np.max(u_avg)+1)
+        xmax = np.max(U_avg)+1
         ax.set_xlim([0, xmax])
         ax.grid(True)
+
+        if height:
+            ax.plot([0, xmax],[height, height],'--',color='0.6',label='_nolegend_')
         
-    def plot_vertical_temp_profile(self, t_min=None, t_max=None, ax=None):
+    def plot_vertical_temp_profile(self, t_min=None, t_max=None, ax=None, height=None):
         """
         Plot the vertical temperature profile over an averaging
         period of [t_min, t_max]
@@ -222,9 +236,10 @@ class Post_abl_stats:
         ax.plot(u_avg, self.z)
         ax.set_xlabel("Temp (K)")
         ax.set_ylabel("Height [m]")
-        # xmax = (np.max(u_avg)+1)
-        # ax.set_xlim([0, xmax])
         ax.grid(True)
+
+        if height:
+            ax.plot([0, xmax],[height, height],'--',color='0.6',label='_nolegend_')
 
     def plot_wind_measurements_at_height(self, height, axarr=None, settling_time=None, label='_nolegend_'):
         """
@@ -283,14 +298,14 @@ class Post_abl_stats:
         """
         
         # Identify nearest height
-        h_idx = np.argmin(np.abs(self.z - height))
-        print(f'Nearest height to {height} is {self.z[h_idx]}')
+        h_idx = np.argmin(np.abs(self.z - height),axis=0)
+        print(f'Nearest height to {height} is {self.z[h_idx][0]}')
         
         # Get the data
         x = self.get_data_from_mean_profiles(variable)
         
         # Return at height
-        return np.squeeze(x[:,h_idx])
+        return np.squeeze(x[:,h_idx[0]])
     
 
     def get_wind_speed_time_series_at_height(self, height):
@@ -365,7 +380,7 @@ class Post_abl_stats:
 
         return TI*100
 
-    def plot_turbulence_intensity_profile(self, t_min=None, t_max=None, ax=None):
+    def plot_turbulence_intensity_profile(self, t_min=None, t_max=None, ax=None, height=None):
 
         """
         Plot the turbulence intensity profile over an averaging
@@ -381,7 +396,7 @@ class Post_abl_stats:
             fig, ax = plt.subplots()
             
         Nh = len(self.z)
-        TI = np.zeros((Nh))
+        TI = np.squeeze(np.zeros((Nh,self.Nfiles)))
 
         for i in range(0,Nh):
             TI[i] = self.get_turbulence_intensity_at_height(self.z[i])
@@ -392,5 +407,7 @@ class Post_abl_stats:
         xmax = (np.max(TI)+1)
         ax.set_xlim([0, xmax])
         ax.grid(True)
-            
+        
+        if height:
+            ax.plot([0, xmax],[height, height],'--',color='0.6',label='_nolegend_')
         
