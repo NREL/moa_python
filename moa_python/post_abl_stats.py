@@ -160,12 +160,14 @@ class Post_abl_stats:
         if len(t_min_idx.shape):
             data = []
             for n in range(len(t_min_idx)):
-                data = np.append(data,np.mean(x[t_min_idx[n]:t_max_idx[n],:,n],axis=0))
+                xn = x[...,n]
+                data = np.append(data,np.mean(xn[t_min_idx[n]:t_max_idx[n]],axis=0))
+            data = np.squeeze(np.reshape(data,list(x.shape)[1:],'F'))
         else:
             data = np.mean(x[t_min_idx:t_max_idx],axis=0)
         
         # Perform the average and return
-        return np.reshape(data,(x.shape[1],self.Nfiles),'F')
+        return data
 
     def get_mean_wind_direction_at_heights(self, t_min=None, t_max=None):
         """ 
