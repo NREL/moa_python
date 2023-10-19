@@ -702,15 +702,15 @@ class Post_precursor:
         self.add_runtime_stats(write_file=False)
 
         ## ADD ACTUATORS (IF DEFINED) - NOT WORKING YET
-        if (hasattr(self,"actuators")) or (len(self.actuators) > 0):
+        if (hasattr(self,"actuators")) and (len(self.actuators) > 0):
             self.add_actuators(write_file=False)
 
         ## ADD SAMPLING (IF DEFINED)
-        if (hasattr(self,"sampling")) or (len(self.sampling) > 0):
+        if (hasattr(self,"sampling")) and (len(self.sampling) > 0):
             self.add_sampling(write_file=False)
 
         ## ADD REFINEMENTS (IF DEFINED)
-        if (hasattr(self,"refinements")) or (len(self.refinements) > 0):
+        if (hasattr(self,"refinements")) and (len(self.refinements) > 0):
             self.add_refinements(write_file=False)
 
         ## OTHER CHANGES FUNCTION
