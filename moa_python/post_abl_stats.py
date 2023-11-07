@@ -30,10 +30,13 @@ class Post_abl_stats:
         # Save the z-levels
         self.z = self.get_data_from_mean_profiles('h')
         
-        # Print a quick summar
+        # Print a quick summary
         self.summary()
         
     def summary(self):
+        """
+        Print out a brief summary of abl_stats file
+        """
         
         print(f"Object is composed of {self.Nfiles} and time runs from {self.time[0]} to {self.time[-1]}")
         print(self.dataset_list[0])
@@ -53,7 +56,7 @@ class Post_abl_stats:
         for i in range(self.Nfiles):
             data = np.append(data,self.dataset_list[i].variables[variablename])
 
-        return data
+        return np.squeeze(np.reshape(data,[self.Nfiles, int(len(data)/self.Nfiles)]).T)
         
     def get_group_from_abl_stats(self, groupname):
         """
@@ -95,17 +98,18 @@ class Post_abl_stats:
 
             if variable in variablenames:
                 if i == 0:
-                    data = np.array(np.array(group[i].variables[variable]))
+                    data = np.array(group[i].variables[variable])
+                    N = len(data.shape)
                 else:
-                    data = np.append(data,np.array(group[i].variables[variable]),axis=0)
+                    data = np.append(data,np.array(group[i].variables[variable]),axis=N-1)
             else:
                 raise ValueError(f'The specified variable was not found in the given group. \n Available variables: {variablenames} \n Requested variable: {variable}')
+        shape = list(data.shape)+[self.Nfiles]
+        shape[N-1] = int(shape[N-1]/self.Nfiles)
 
-
-        return data
+        return np.reshape(data, shape, 'F')
     
-    def get_data_from_mean_profiles(self, variable
-    ):
+    def get_data_from_mean_profiles(self, variable):
         
         """
         Reads requested data from mean profile and returns array
@@ -139,24 +143,52 @@ class Post_abl_stats:
         
         # Set defaults
         if t_min is None:
-            t_min = self.time[0]
+            t_min = np.min(self.time)
         if t_max is None:
-            t_max = self.time[-1]
+            t_max = np.max(self.time)
             
         # Check for out of bounds
-        if t_min < self.time[0]:
-            raise ValueError(f'T_min ({t_min}) is less than the minimum time ({self.time[0]})')
-        if t_max > self.time[-1]:
-            raise ValueError(f'T_max ({t_max}) is greater than the maximum time ({self.time[-1]})')
-            
+        if t_min < np.min(self.time):
+            raise ValueError(f'T_min ({t_min}) is less than the minimum time ({np.min(self.time)})')
+        if t_max > np.max(self.time):
+            raise ValueError(f'T_max ({t_max}) is greater than the maximum time ({np.max(self.time)})')
+        
         # Find time indices within time
-        t_min_idx = np.argmax(self.time >= t_min)
-        t_max_idx = np.argmax(self.time >= t_max)
+        t_min_idx = np.argmax(self.time >= t_min, axis=0)
+        t_max_idx = np.argmax(self.time >= t_max, axis=0)
+
+        if len(t_min_idx.shape):
+            data = []
+            for n in range(len(t_min_idx)):
+                xn = x[...,n]
+                data = np.append(data,np.mean(xn[t_min_idx[n]:t_max_idx[n]],axis=0))
+            data = np.squeeze(np.reshape(data,list(x.shape)[1:],'F'))
+        else:
+            data = np.mean(x[t_min_idx:t_max_idx],axis=0)
         
         # Perform the average and return
-        return np.mean(x[t_min_idx:t_max_idx],axis=0)
+        return data
+
+    def get_mean_wind_direction_at_heights(self, t_min=None, t_max=None):
+        """ 
+        Get the wind direction at every height over averaging window [t_min, t_max]
+
+        Args in:
+            t_min (float): time to start averaging (inclusive)
+            t_max (float): time to stop averaging (non-inclusive)
+        """
+
+        u = self.get_data_from_mean_profiles('u')
+        u_avg = self.time_average_data(u, t_min, t_max)
+
+        v = self.get_data_from_mean_profiles('v')
+        v_avg = self.time_average_data(v, t_min, t_max)
+
+        self.wd_rad = np.arctan2(v_avg, u_avg) # Defined so 0 positive along x-axis
+        self.wd_deg = (270.0 - np.degrees(self.wd_rad)) % 360. # Compass
+
     
-    def plot_vert_vel_profile(self, t_min=None, t_max=None, ax=None):
+    def plot_vertical_vel_profile(self, t_min=None, t_max=None, ax=None, height=None):
         """
         Plot the vertical velocity profile over an averaging
         period of [t_min, t_max]
@@ -171,15 +203,90 @@ class Post_abl_stats:
             fig, ax = plt.subplots()
             
         u = self.get_data_from_mean_profiles('u')
+        v = self.get_data_from_mean_profiles('v')
+        u_avg = self.time_average_data(u, t_min, t_max)
+        v_avg = self.time_average_data(v, t_min, t_max)
+        U_avg = np.sqrt(u_avg**2 + v_avg**2)
+        
+        ax.plot(U_avg, self.z)
+        ax.set_xlabel("U m/s")
+        ax.set_ylabel("Height [m]")
+        xmax = np.max(U_avg)+1
+        ax.set_xlim([0, xmax])
+        ax.grid(True)
+
+        if height:
+            ax.plot([0, xmax],[height, height],'--',color='0.6',label='_nolegend_')
+        
+    def plot_vertical_temp_profile(self, t_min=None, t_max=None, ax=None, height=None):
+        """
+        Plot the vertical temperature profile over an averaging
+        period of [t_min, t_max]
+
+        Args in:
+            t_min (float): time to start averaging (inclusive)
+            t_max (float): time to stop averaging (non-inclusive)
+            ax (:py:class:'matplotlib.pyplot.axes', optional):
+                figure axes. Defaults to None.
+        """
+        if ax is None:
+            fig, ax = plt.subplots()
+            
+        u = self.get_data_from_mean_profiles('theta')
         u_avg = self.time_average_data(u, t_min, t_max)
         
         ax.plot(u_avg, self.z)
-        ax.set_xlabel("U m/s")
+        ax.set_xlabel("Temp (K)")
         ax.set_ylabel("Height [m]")
-        xmax = (np.max(u_avg)+1)
-        ax.set_xlim([0, xmax])
         ax.grid(True)
-        
+
+        if height:
+            ax.plot([0, xmax],[height, height],'--',color='0.6',label='_nolegend_')
+
+    def plot_wind_measurements_at_height(self, height, axarr=None, settling_time=None, label='_nolegend_'):
+        """
+        Plot ws, wd and the simple cartesian variables of varaiance u'u'_r, v'v'_r, w'w'_r and wind speed
+
+        Args in:
+            height (float): the height to extract, if not a value of self.z, will use nearest
+            axarr (list?): an array of axis
+            settling_time (float): An option value that indicates a proposed setting time
+
+        Args out:
+            axarr (list?): an array of axis
+        """
+
+        if axarr is None:
+            fig, axarr = plt.subplots(5,1,figsize=(15,10), sharex=True)
+
+        ax = axarr[0]
+        data = self.get_wind_speed_time_series_at_height(height)
+        ax.plot(self.time, data, label=label)
+        ax.set_title('Wind Speed')
+        ax.grid(True)
+        if not label =='_nolegend_':
+            ax.legend()
+
+        ax = axarr[1]
+        data = self.get_wind_direction_time_series_at_height(height)
+        ax.plot(self.time, data)
+        ax.set_title('Wind Direction')
+        ax.grid(True)
+
+        for sig, ax in zip(["u'u'_r","v'v'_r","w'w'_r"], axarr[2:]):
+
+            data = self.get_time_series_at_height(sig, height)
+            ax.plot(self.time, data)
+            ax.set_title(sig)
+            
+            ax.grid(True)
+
+        axarr[-1].set_xlabel('Time (s)')
+
+        if settling_time is not None:
+            for ax in axarr:
+                ax.axvline(settling_time, color='r', ls='--')
+
     def get_time_series_at_height(self, variable, height):
         """
         Return the values of a variable within the mean_profiles for a specific height
@@ -193,17 +300,116 @@ class Post_abl_stats:
         """
         
         # Identify nearest height
-        h_idx = np.argmin(np.abs(self.z - height))
-        print(f'Nearest height to {height} is {self.z[h_idx]}')
+        h_idx = np.argmin(np.abs(self.z - height),axis=0)
+        print(f'Nearest height to {height} is {self.z[h_idx][0]}')
         
         # Get the data
         x = self.get_data_from_mean_profiles(variable)
         
         # Return at height
-        return np.squeeze(x[:,h_idx])
+        return np.squeeze(x[:,h_idx[0]])
     
-        
-        
 
-    
+    def get_wind_speed_time_series_at_height(self, height):
+        """
+        Return the magnitude wind speed as a time series
+
+        Args in:
+            height (float): the height to extract, if not a value of self.z, will use nearest
+
+        Args out:
+            u (class 'numpy.ndarray'): wind speed magnitude over time
+        """
+
+        u = self.get_time_series_at_height('u', height)
+        v = self.get_time_series_at_height('v', height)
+
+        return np.sqrt(u**2 + v**2)
+
+    def get_wind_direction_time_series_at_height(self, height):
+        """
+        Return the wind direction (compass) as a time series
+
+        Args in:
+            height (float): the height to extract, if not a value of self.z, will use nearest
+
+        Args out:
+            wd_deg (class 'numpy.ndarray'): compass wind direction in degrees
+        """
+
+        u = self.get_time_series_at_height('u', height)
+        v = self.get_time_series_at_height('v', height)
+
+        wd_rad = np.arctan2(v, u) # Defined so 0 positive along x-axis
+        wd_deg = (270.0 - np.degrees(wd_rad)) % 360. # Compass
+
+        return wd_deg
+
+    def get_turbulence_intensity_at_height(self, height, t_min=None, t_max=None):
+
+        """ 
+        Get the turbulence intensity at prescribed height over averaging window [t_min, t_max]
+
+        Args in:
+            height (float): domain height (or nearest domain cell value to height) at which the TI is calculated
+            t_min  (float): time to start averaging (inclusive)
+            t_max  (float): time to stop averaging (non-inclusive)
+        """
+
+        u = self.get_time_series_at_height('u', height)
+        u_avg = self.time_average_data(u, t_min, t_max)
+
+        v = self.get_time_series_at_height('v', height)
+        v_avg = self.time_average_data(v, t_min, t_max)
+
+        w = self.get_time_series_at_height('w', height)
+        w_avg = self.time_average_data(w, t_min, t_max)
+
+        vel_mag_avg = np.sqrt(u_avg**2 + v_avg**2 + w_avg**2)
+
+        uu = self.get_time_series_at_height("u'u'_r", height)
+        uu_avg = self.time_average_data(uu, t_min, t_max)
+
+        vv = self.get_time_series_at_height("v'v'_r", height)
+        vv_avg = self.time_average_data(vv, t_min, t_max)
+
+        ww = self.get_time_series_at_height("w'w'_r", height)
+        ww_avg = self.time_average_data(ww, t_min, t_max)
+
+        tke = 0.5*(uu_avg + vv_avg + ww_avg)
+        TI = np.sqrt(2.0/3.0*tke)/vel_mag_avg
+
+
+        return TI*100
+
+    def plot_turbulence_intensity_profile(self, t_min=None, t_max=None, ax=None, height=None):
+
+        """
+        Plot the turbulence intensity profile over an averaging
+        period of [t_min, t_max]
+
+        Args in:
+            t_min (float): time to start averaging (inclusive)
+            t_max (float): time to stop averaging (non-inclusive)
+            ax (:py:class:'matplotlib.pyplot.axes', optional):
+                figure axes. Defaults to None.
+        """
+        if ax is None:
+            fig, ax = plt.subplots()
+            
+        Nh = len(self.z)
+        TI = np.squeeze(np.zeros((Nh,self.Nfiles)))
+
+        for i in range(0,Nh):
+            TI[i] = self.get_turbulence_intensity_at_height(self.z[i])
+
+        ax.plot(TI, self.z)
+        ax.set_xlabel("TI %")
+        ax.set_ylabel("Height [m]")
+        xmax = (np.max(TI)+1)
+        ax.set_xlim([0, xmax])
+        ax.grid(True)
+        
+        if height:
+            ax.plot([0, xmax],[height, height],'--',color='0.6',label='_nolegend_')
         
