@@ -23,6 +23,8 @@ REQUIRED = [
     "jupyter"
 ]
 
+
+
 ROOT = Path(__file__).parent
 with open(ROOT / "moa_python" / "version.py") as version_file:
     VERSION = version_file.read().strip()
