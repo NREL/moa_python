@@ -71,3 +71,6 @@ def combine_plots(planes, **kwargs):
         figs[kwargs['fignum']+k].subplots_adjust(right=0.88)
         cbar_ax = figs[kwargs['fignum']+k].add_axes([0.92, 0.23, 0.02, 0.55])
         cb = figs[kwargs['fignum']+k].colorbar(im,cax=cbar_ax,shrink=0.6)
+
+
+def vel_in_wake():
