@@ -23,6 +23,22 @@ REQUIRED = [
     "jupyter"
 ]
 
+EXTRAS = {
+    "docs": {
+        "jupyter-book<=0.13.3",
+        "sphinx-book-theme",
+        "sphinx-autodoc-typehints",
+        "sphinxcontrib-autoyaml",
+        "sphinxcontrib.mermaid",
+    },
+    "develop": {
+        "pytest",
+        "pre-commit",
+        "ruff",
+        "isort",
+    },
+}
+
 ROOT = Path(__file__).parent
 with open(ROOT / "moa_python" / "version.py") as version_file:
     VERSION = version_file.read().strip()
