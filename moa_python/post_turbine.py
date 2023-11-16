@@ -13,7 +13,7 @@ class Post_turbine:
     See: https://rosco.readthedocs.io/en/latest/source/rosco_toolbox.html
     """
 
-    def __init__(self, filenames=[], tmin=None, tmax=None, verbose=0):
+    def __init__(self, filenames=[], tmin=None, tmax=None, verbose=False):
         """
         Load turbine files (if filenames are defined)
         """
@@ -22,7 +22,7 @@ class Post_turbine:
             self.load_fast_out(filenames, tmin=tmin, tmax=tmax, verbose=verbose)
     
 
-    def load_fast_out(self, filenames, tmin=None, tmax=None, verbose=0, max_cores=4):
+    def load_fast_out(self, filenames, tmin=None, tmax=None, verbose=False, max_cores=4):
         """Load a FAST binary or ascii output file
         
         Parameters
