@@ -10,7 +10,7 @@ class Post_plane:
     To do for future: make it compatible for different plane groups.
     """
     
-    def __init__(self, filename, freq = 1, verbose = 1, origin = None, flip = False):
+    def __init__(self, filename, freq = 1, verbose = True, origin = None, flip = False):
         
         # Save the filename
         self.filename = filename
@@ -77,7 +77,7 @@ class Post_plane:
         return self.z
 
 
-    def get_plane_index(self, z, plane = 'z', verbose = 1):
+    def get_plane_index(self, z, plane = 'z', verbose = True):
         """
         Return the nearest index to a position
         
@@ -99,7 +99,7 @@ class Post_plane:
         return z_idx
 
 
-    def get_time_index(self, time, verbose = 1):
+    def get_time_index(self, time, verbose = True):
         """
         Return the nearest time index to a time
         
@@ -121,7 +121,7 @@ class Post_plane:
         return t_idx
 
 
-    def get_plane(self, plane, time, component = 'u', verbose = 1):
+    def get_plane(self, plane, time, component = 'u', verbose = True):
         """
         Get a plane at particular location and time
         
@@ -143,7 +143,7 @@ class Post_plane:
         return self.vel_planes[component][t_idx, :][z_idx*self.x_N*self.y_N:(z_idx+1)*self.x_N*self.y_N].reshape(self.y_N,self.x_N)
 
 
-    def get_mean_plane(self, plane, component = 'u', timespan = None, verbose = 1):
+    def get_mean_plane(self, plane, component = 'u', timespan = None, verbose = True):
         """
         Get the mean plane at a particular location
         
@@ -169,7 +169,7 @@ class Post_plane:
         return mean_plane[z_idx*self.x_N*self.y_N:(z_idx+1)*self.x_N*self.y_N].reshape(self.y_N,self.x_N)
     
 
-    def get_line_from_plane(self, y, time = None, z = 0, axis = 'x', component = 'u', verbose = 1):
+    def get_line_from_plane(self, y, time = None, z = 0, axis = 'x', component = 'u', verbose = True):
         """
         Outputs the velocity over a line
         Args in:
@@ -201,7 +201,7 @@ class Post_plane:
                     .reshape(np.size(t_idx),self.y_N,self.x_N)[np.ix_(np.arange(np.size(t_idx)),idx_y,idx_x)])
 
 
-    def mean_vel_in_circle(self, origin, radius, z = None, time = None, component = 'u', verbose = 1):
+    def mean_vel_in_circle(self, origin, radius, z = None, time = None, component = 'u', verbose = True):
         """
         Outputs the mean velocity over an area of the flow field
         Args in:
@@ -225,7 +225,7 @@ class Post_plane:
         return np.average(self.vel_planes[component][np.ix_(t_idx, z_idx*self.x_N*self.y_N+idx)], axis=1)
 
 
-    def get_mean_line_from_plane(self, y, timespan = None, z = 0, axis = 'x', component = 'u', verbose = 1):
+    def get_mean_line_from_plane(self, y, timespan = None, z = 0, axis = 'x', component = 'u', verbose = True):
         """
         Outputs the mean velocity over a line
         Args in:
@@ -306,7 +306,7 @@ class Post_plane:
             print('WARNING: Field already scaled to rotor diameter. Nothing happened.')
 
 
-    def plot_plane(self, z, time, component = 'u', ax = None, vmin = None, vmax = None, verbose = 1):
+    def plot_plane(self, z, time, component = 'u', ax = None, vmin = None, vmax = None, verbose = True):
         """
         Plot a plane at a particular slice and time
         
@@ -339,7 +339,7 @@ class Post_plane:
         return ax
 
 
-    def plot_mean_plane(self, z, component = 'u', fig = None, ax = None, vmin=None, vmax=None, timespan=None, verbose = 1):
+    def plot_mean_plane(self, z, component = 'u', fig = None, ax = None, vmin=None, vmax=None, timespan=None, verbose = True):
         """
         Plot the mean plane at a particular height and time
         
@@ -371,7 +371,7 @@ class Post_plane:
         return ax
 
 
-    def plot_line(self, y, time, z = 0, axis = 'x', component = 'u', ax = None, verbose = 1):
+    def plot_line(self, y, time, z = 0, axis = 'x', component = 'u', ax = None, verbose = True):
         """
         Plot a line at a particular slice, position and time
         
@@ -402,7 +402,7 @@ class Post_plane:
         return ax
 
 
-    def plot_mean_line(self, y, timespan = None, z = 0, axis = 'x', component = 'u', ax = None, verbose = 1):
+    def plot_mean_line(self, y, timespan = None, z = 0, axis = 'x', component = 'u', ax = None, verbose = True):
         """
         Plot a line at a particular slice, position and time
         
@@ -460,7 +460,7 @@ class Post_plane:
                     hub_height+[turb_loc[1]-rot_diam/2,turb_loc[1]+rot_diam/2],'k',linewidth=1.5)
 
 
-    def vel_in_wake(self, radius, turb_loc = None, z = None, time = None, axis = 'x', component = 'u', verbose = 1):
+    def vel_in_wake(self, radius, turb_loc = None, z = None, time = None, axis = 'x', component = 'u', verbose = True):
         """
         Calculates velocity in the wake of a turbine
         
@@ -488,7 +488,7 @@ class Post_plane:
             return self.mean_vel_in_circle(turb_loc, radius, z, time, component, verbose)
 
 
-    def mean_vel_in_wake(self, radius, turb_loc = None, z = None, timespan = None, axis = 'x', component = 'u', verbose = 1):
+    def mean_vel_in_wake(self, radius, turb_loc = None, z = None, timespan = None, axis = 'x', component = 'u', verbose = True):
         """
         Calculates average velocity in the wake of a turbine
         
@@ -513,7 +513,7 @@ class Post_plane:
         return mean_vel
 
 
-    def plot_vel_in_wake(self, radius, turb_loc = [0,0,0], z = None, timespan = None, axis = 'x', component = 'u', ax = None, linestyle = '-', verbose = 0):
+    def plot_vel_in_wake(self, radius, turb_loc = [0,0,0], z = None, timespan = None, axis = 'x', component = 'u', ax = None, linestyle = '-', verbose = False):
         """
         Plots average velocity in the wake using mean_vel_in_wake
 
@@ -556,7 +556,7 @@ class Post_plane:
 
     def periodic_averaging(self, signal, num_bins, period, poi=None, amplitude=None, offset=0):
         """
-        
+        WIP
         """
 
         
@@ -570,7 +570,7 @@ class Post_plane:
         return signal_in_bins, bins
 
 
-    def plot_vorticity(self, plane, time, orientation='xy', ax=None, vmin=None, vmax=None, verbose=1):
+    def plot_vorticity(self, plane, time, orientation='xy', ax=None, vmin=None, vmax=None, verbose = True):
         """
         Plot vorticity over a plane at a particular slice and time
         
@@ -603,7 +603,7 @@ class Post_plane:
         return ax
 
 
-    def fit_gauss_to_wake_profile(self, x, y = None, p0 = None, fit = 'double', time = None, z = 0, axis = 'y', component = 'u', ax = None, verbose = 0):
+    def fit_gauss_to_wake_profile(self, x, y = None, p0 = None, fit = 'double', time = None, z = 0, axis = 'y', component = 'u', ax = None, verbose = False):
         """
         Fit a Gauss curve to signal y:
             ym = v0 - a*exp(-(x-x0))^2 / (2*sigma^2)
@@ -650,7 +650,7 @@ class Post_plane:
         return popt
 
 
-    def fit_gauss_to_mean_wake_profile(self, x, y = None, p0 = None, fit = 'double', timespan = None, z = 0, axis = 'y', component = 'u', ax = None, verbose = 0):
+    def fit_gauss_to_mean_wake_profile(self, x, y = None, p0 = None, fit = 'double', timespan = None, z = 0, axis = 'y', component = 'u', ax = None, verbose = False):
         """
         Fit a Gauss curve to signal y:
             ym = v0 - a*exp(-(x-x0))^2 / (2*sigma^2)
@@ -717,7 +717,7 @@ class Post_plane:
         return ax
 
 
-    def fit_gauss_to_time_series(self, x, y = None, p0 = None, fit = 'double', time = None, z = 0, axis = 'y', component = 'u', verbose = 0):
+    def fit_gauss_to_time_series(self, x, y = None, p0 = None, fit = 'double', time = None, z = 0, axis = 'y', component = 'u', verbose = False):
         """
         Fit a Gauss curve to signal y over a time series. 
         Returns optimal fit parameters popt as function of time
@@ -747,7 +747,7 @@ class Post_plane:
         return np.array(parr)
 
 
-    def track_wake_center_over_time(self, x, y = None, p0 = None, fit = 'double', timespan = None, z = 0, axis = 'y', component = 'u', ax = None, verbose = 0):
+    def track_wake_center_over_time(self, x, y = None, p0 = None, fit = 'double', timespan = None, z = 0, axis = 'y', component = 'u', ax = None, verbose = False):
         """
         Tracks the wake centerline over time,
         based on the gaussian fit obtained with fit_gauss_to_time_series.
@@ -801,13 +801,13 @@ def gauss_func(x, v0, a, x0, sigma, w = None):
     """
     Simple or double gaussian function:
     Single:
-        y = v0 - a*exp(-(x-x0))^2 / (2*sigma^2)
+        y = v0 - a*exp( -(x-x0)^2 / (2*sigma^2) )
     Double:
-        v0 - a*exp(-(x-x0-w))^2 / (2*sigma^2) - a*exp(-(x-x0+w))^2 / (2*sigma^2)
+        v0 - a*exp( -(x-x0-w)^2 / (2*sigma^2) ) - a*exp( -(x-x0+w))^2 / (2*sigma^2) )
 
     Args in:
         x (array-like): x vector
-        p (array-like): in shape [v0, a, x0, sigma, w]
+        [v0, a, x0, sigma, w] (floats): Gauss inputs
             if w is not provided, single gaussian fit is applied
 
     Args out: 
@@ -818,12 +818,6 @@ def gauss_func(x, v0, a, x0, sigma, w = None):
         return v0 - a*np.exp(-(x-x0)**2/(2*sigma**2))
     else: 
         return v0 - a*np.exp(-(x-x0-w)**2/(2*sigma**2)) - a*np.exp(-(x-x0+w)**2/(2*sigma**2))
-
-
-# def gauss_func_2d(x, y, )
-
-
-
 
 
         
