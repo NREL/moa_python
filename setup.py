@@ -20,7 +20,8 @@ REQUIRED = [
     'pytest',
     'seaborn',
     'netCDF4',
-    "jupyter"
+    "jupyter",
+    "scipy",
 ]
 
 EXTRAS = {
