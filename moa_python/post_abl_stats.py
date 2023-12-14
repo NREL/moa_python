@@ -345,6 +345,76 @@ class Post_abl_stats:
 
         return wd_deg
 
+
+    def get_vertical_wind_direction_profile(self, t_min=None, t_max=None):
+
+        """
+        Get the vertical wind direction profile over averaging window [t_min, t_max]
+
+        Args in:
+            t_min  (float): time to start averaging (inclusive)
+            t_max  (float): time to stop averaging (non-inclusive)
+        """
+
+        wd = np.squeeze(np.zeros((len(self.z),self.Nfiles)))
+        for n in range(len(self.z)):
+            wd[n] = self.time_average_data(self.get_wind_direction_time_series_at_height(self.z[n]),t_min, t_max)
+        
+        return wd
+
+    
+    def plot_wind_direction_profile(self, t_min=None, t_max=None, ax=None, height=None):
+        
+        """
+        Plot the wind direction profile over an averaging
+        period of [t_min, t_max]
+
+        Args in:
+            t_min (float): time to start averaging (inclusive)
+            t_max (float): time to stop averaging (non-inclusive)
+            ax (:py:class:'matplotlib.pyplot.axes', optional):
+                figure axes. Defaults to None.
+            height (float): turbine hub height or other height of interest
+        """
+
+        if ax is None:
+            fig, ax = plt.subplots()
+
+        wd = self.get_vertical_wind_direction_profile(t_min, t_max)
+
+        ax.plot(wd, self.z)
+        ax.set_xlabel("Wind direction [deg]")
+        ax.set_ylabel("Height [m]")
+        xmin = np.min(wd)-1
+        xmax = (np.max(wd)+1)
+        ax.set_xlim([xmin, xmax])
+        ax.grid(True)
+        
+        if height:
+            ax.plot([xmin, xmax],[height, height],'--',color='0.6',label='_nolegend_')
+
+
+    def get_wind_veer(self, hub_height, rot_diam, t_min=None, t_max=None):
+
+        """
+        Get the wind veer over the rotor swept area (height from hub_height-rot_diam/2 to hub_height+rot_diam/2)
+
+        Args in:
+            hub_height (float): turbine hub height (m)
+            rot_diam (float): turbine rotor diameter (m)
+        """
+
+        # Find time indices within time
+        z_min_idx = np.argmax(self.z >= hub_height-rot_diam/2, axis=0)
+        z_max_idx = np.argmax(self.z >= hub_height+rot_diam/2, axis=0)
+
+        wd = np.squeeze(np.zeros((int(z_max_idx-z_min_idx),self.Nfiles)))
+        for n in range(int(z_max_idx-z_min_idx)):
+            wd[n] = self.time_average_data(self.get_wind_direction_time_series_at_height(self.z[z_min_idx+n]), t_min, t_max)
+
+        return np.max(wd) - np.min(wd)
+
+
     def get_turbulence_intensity_at_height(self, height, t_min=None, t_max=None):
 
         """ 
@@ -401,7 +471,7 @@ class Post_abl_stats:
         TI = np.squeeze(np.zeros((Nh,self.Nfiles)))
 
         for i in range(0,Nh):
-            TI[i] = self.get_turbulence_intensity_at_height(self.z[i])
+            TI[i] = self.get_turbulence_intensity_at_height(self.z[i], t_min, t_max)
 
         ax.plot(TI, self.z)
         ax.set_xlabel("TI %")

@@ -24,7 +24,7 @@ class Post_plane:
         self.num_time_steps = len(self.time)
 
         # Save the x and y dimensions
-        self.plane = list(self.dataset.groups.keys())[0]
+        self.plane = list(self.dataset.groups.keys())[0] # TODO: make compatible for multiple planes within one dataset?
         self.x_N = self.dataset.groups[self.plane].ijk_dims[0]
         self.y_N = self.dataset.groups[self.plane].ijk_dims[1]
         self.x_max = np.sqrt(sum(entry**2 for entry in self.dataset.groups[self.plane].axis1))
@@ -135,12 +135,12 @@ class Post_plane:
             data (not sure): the plane
         """
 
-        z_idx = self.get_plane_index(plane)
-        t_idx = self.get_time_index(time)
+        z_idx = self.get_plane_index(plane, verbose = verbose)
+        t_idx = self.get_time_index(time, verbose = verbose)
 
         if verbose: print(f"Returning {component} velocity plane for slice at {self.z[z_idx]} at time {self.time[t_idx]}")
 
-        return self.vel_planes[component][t_idx, :][z_idx*self.x_N*self.y_N:(z_idx+1)*self.x_N*self.y_N].reshape(self.y_N,self.x_N)
+        return np.squeeze(self.vel_planes[component][t_idx, :][z_idx*self.x_N*self.y_N:(z_idx+1)*self.x_N*self.y_N].reshape(np.size(t_idx),self.y_N,self.x_N))
 
 
     def get_mean_plane(self, plane, component = 'u', timespan = None, verbose = True):
@@ -185,9 +185,9 @@ class Post_plane:
 
         if axis == 'x': 
             idx_x = np.arange(0,self.x_N)
-            idx_y = self.get_plane_index(y, axis, verbose)
+            idx_y = self.get_plane_index(y, 'y', verbose)
         if axis == 'y':
-            idx_x = self.get_plane_index(y, axis, verbose)
+            idx_x = self.get_plane_index(y, 'x', verbose)
             idx_y = np.arange(0,self.y_N)
         
         idx_z = self.get_plane_index(z, verbose = verbose)
@@ -195,7 +195,7 @@ class Post_plane:
             t_idx = np.arange(0, self.num_time_steps)
         else:
             if np.size(time) == 1: t_idx = [self.get_time_index(time, verbose = verbose)]
-            else: t_idx = np.arange(self.get_time_index(time[0], verbose = verbose), self.get_time_index(time[-1], verbose = verbose))
+            else: t_idx = np.arange(self.get_time_index(time[0], verbose = verbose), self.get_time_index(time[-1], verbose = verbose)+1)
 
         return np.squeeze(self.vel_planes[component][t_idx, idx_z*self.x_N*self.y_N:(idx_z+1)*self.x_N*self.y_N]\
                     .reshape(np.size(t_idx),self.y_N,self.x_N)[np.ix_(np.arange(np.size(t_idx)),idx_y,idx_x)])
@@ -322,19 +322,22 @@ class Post_plane:
 
         if verbose: print(f"Plotting {component} velocity for plane at location {z} at time {time}")
 
-        plane = self.get_plane(z,time,component, verbose = verbose)
+        if len(np.shape(z)) < 2:
+            z = self.get_plane(z, time, component, verbose = verbose)
 
         if ax is None:
             fig, ax = plt.subplots()
+            plot_cbar = True
         else:
             plt.sca(ax)
             fig = plt.gcf()
-        im = ax.pcolor(self.x, self.y, plane, vmin=vmin, vmax=vmax)
+            plot_cbar = False
+        im = ax.pcolor(self.x, self.y, z, vmin=vmin, vmax=vmax)
         ax.set_xlabel(f'X [{self.unit}]')
         ax.set_ylabel(f'Y [{self.unit}]')
         ax.set_aspect('equal')
 
-        fig.colorbar(im,ax=ax,location='bottom')
+        if plot_cbar: fig.colorbar(im,ax=ax,location='bottom')
 
         return ax
 
@@ -358,15 +361,17 @@ class Post_plane:
 
         if ax is None:
             fig, ax = plt.subplots()
+            plot_cbar = True
         else:
             plt.sca(ax)
             fig = plt.gcf()
+            plot_cbar = False
         im = ax.pcolor(self.x, self.y, plane, vmin=vmin, vmax=vmax)
         ax.set_xlabel(f'X [{self.unit}]')
         ax.set_ylabel(f'Y [{self.unit}]')
         ax.set_aspect('equal')
 
-        fig.colorbar(im, ax=ax,location='bottom')
+        if plot_cbar: fig.colorbar(im,ax=ax,location='bottom')
 
         return ax
 
@@ -433,7 +438,7 @@ class Post_plane:
         return ax
 
     
-    def plot_turbine(self,hub_height=150/240,rot_diam=1,turb_loc=[0,0],ax=None,plane='xy'):
+    def plot_turbine(self, hub_height=150/240, rot_diam=1, turb_loc=[0,0], angle = 0, ax=None, plane='xy'):
         """
         Plot the turbine location in the flow field
 
@@ -448,16 +453,17 @@ class Post_plane:
         """
 
         if ax is None: ax=plt.gca()
+        angle = angle/180*np.pi
 
         if plane == 'yz':
             ax.plot(rot_diam/2*np.sin(np.linspace(0, 2*np.pi,200)),\
                     hub_height+rot_diam/2*np.cos(np.linspace(0, 2*np.pi,200)),'k-',linewidth=1)
         elif plane == 'xy':
-            ax.plot([turb_loc[0],turb_loc[0]],\
-                    [turb_loc[1]-rot_diam/2,turb_loc[1]+rot_diam/2],'k',linewidth=1.5)
+            ax.plot([turb_loc[0]-rot_diam/2*np.sin(angle),turb_loc[0]+rot_diam/2*np.sin(angle)],\
+                    [turb_loc[1]-rot_diam/2*np.cos(angle),turb_loc[1]+rot_diam/2*np.cos(angle)],'k',linewidth=1.5)
         elif plane == 'xz':
-            ax.plot([turb_loc[0],turb_loc[0]],\
-                    hub_height+[turb_loc[1]-rot_diam/2,turb_loc[1]+rot_diam/2],'k',linewidth=1.5)
+            ax.plot([turb_loc[0]-rot_diam/2*np.sin(angle),turb_loc[0]+rot_diam/2*np.sin(angle)],\
+                    [hub_height+turb_loc[1]-rot_diam/2*np.cos(angle),hub_height+turb_loc[1]+rot_diam/2*np.cos(angle)],'k',linewidth=1.5)
 
 
     def vel_in_wake(self, radius, turb_loc = None, z = None, time = None, axis = 'x', component = 'u', verbose = True):
@@ -603,7 +609,7 @@ class Post_plane:
         return ax
 
 
-    def fit_gauss_to_wake_profile(self, x, y = None, p0 = None, fit = 'double', time = None, z = 0, axis = 'y', component = 'u', ax = None, verbose = False):
+    def fit_gauss_to_wake_profile(self, x, y = None, p0 = None, bounds = None, fit = 'single', time = None, z = 0, axis = 'y', component = 'u', ax = None, verbose = False):
         """
         Fit a Gauss curve to signal y:
             ym = v0 - a*exp(-(x-x0))^2 / (2*sigma^2)
@@ -618,39 +624,31 @@ class Post_plane:
             ax (mpl.axis or bool): if defined, plots the signal and the fit
 
         Args out: 
-            ym (array): the best Gaussian fit to y
             popt (array): optimal parameters for p
         """
 
-        if time is None: time = self.time[-1]
         if y is None:
             y = x
             x = getattr(self, axis)
         if np.size(y) == 1: 
+            if time is None: time = self.time[-1]
             y = self.get_line_from_plane(y, time, z, axis, component, verbose)
 
-        if p0 is None:
-            v0 = np.max(self.vel_planes['x'])
-            a = np.max(self.vel_planes['x']) - np.min(self.vel_planes['x'])
-            x0 = np.average(x)
-            if self.unit == 'm': sigma = 120
-            else: sigma = 1
-            if fit == 'double': p0 = [v0, a, x0, sigma/2, sigma/2]
-            else: p0 = [v0, a, x0, sigma]
+        if bounds is None: bounds = get_gauss_bounds(x, y, p0)
+        if p0 is None: p0 = get_gauss_init_guess(x, y, fit, bounds)
 
         try: 
-            popt, pcov = curve_fit(gauss_func, x, y, p0)
+            popt, pcov = curve_fit(gauss_func, x, y, p0, bounds=bounds)
+            if ax:
+                if not hasattr(ax, 'plot'): fig, ax = plt.subplots()
+                ax = self.plot_gauss_fit(x, y, popt, p0, ax)
         except:
-            print(f'Warning! Optimal parameters not found at time {time}. Reverted to initial guess.')
-            popt = p0
-
-        if ax:
-            ax = self.plot_gauss_fit(x, y, popt, ax)
-
+            popt = -1
+            
         return popt
 
 
-    def fit_gauss_to_mean_wake_profile(self, x, y = None, p0 = None, fit = 'double', timespan = None, z = 0, axis = 'y', component = 'u', ax = None, verbose = False):
+    def fit_gauss_to_mean_wake_profile(self, x, y = None, p0 = None, bounds = None, fit = 'single', timespan = None, z = 0, axis = 'y', component = 'u', ax = None, verbose = False):
         """
         Fit a Gauss curve to signal y:
             ym = v0 - a*exp(-(x-x0))^2 / (2*sigma^2)
@@ -663,7 +661,6 @@ class Post_plane:
             fit (str): type of Gaussian fit ('single' or 'double' (default))
 
         Args out: 
-            ym (array): the best Gaussian fit to y
             popt (array): optimal parameters for p
         """
 
@@ -676,28 +673,21 @@ class Post_plane:
         elif np.size(y) == 1:
             y = self.get_mean_line_from_plane(y, timespan, z, axis, component, verbose)
         
-        if p0 is None:
-            v0 = np.max(self.vel_planes['x'])
-            a = np.max(self.vel_planes['x']) - np.min(self.vel_planes['x'])
-            x0 = np.average(x)
-            if self.unit == 'm': sigma = 120
-            else: sigma = 1
-            if fit == 'double': p0 = [v0, a, x0, sigma/2, sigma/2]
-            else: p0 = [v0, a, x0, sigma]
-
+        if bounds is None: bounds = get_gauss_bounds(x, y, fit)
+        if p0 is None: p0 = get_gauss_init_guess(x, y, fit, bounds)
+                
         try: 
-            popt, pcov = curve_fit(gauss_func, x, y, p0)
+            popt, pcov = curve_fit(gauss_func, x, y, p0, bounds=bounds)
         except:
-            print('Warning! Optimal parameters not found. Reverted to initial guess.')
-            popt = p0
+            popt = -1
         
         if ax:
-            ax = self.plot_gauss_fit(x, y, popt, ax)
+            ax = self.plot_gauss_fit(x, y, popt, p0, ax)
 
         return popt
 
 
-    def plot_gauss_fit(self, x, y, popt, ax = None):
+    def plot_gauss_fit(self, x, y, popt, p0 = None, ax = None):
         """
         Plots the wake profile and Gaussian fit
         """
@@ -709,6 +699,8 @@ class Post_plane:
         ax.grid()
         ylim = ax.get_ylim()
         ax.plot([popt[2], popt[2]],ylim,'--', color='0.7')
+        if p0 is not None:
+            ax.plot(x, gauss_func(x,*p0),':', color='0.5')
         ax.set_ylim(ylim)
         ax.set_xlabel(f'Position [{self.unit}]')
         ax.set_ylabel(f'Wind speed [m/s]')
@@ -717,37 +709,37 @@ class Post_plane:
         return ax
 
 
-    def fit_gauss_to_time_series(self, x, y = None, p0 = None, fit = 'double', time = None, z = 0, axis = 'y', component = 'u', verbose = False):
+    def fit_gauss_to_time_series(self, x, y = None, p0 = None, bounds = None, fit = 'single', time = None, z = 0, axis = 'y', component = 'u', verbose = False):
         """
         Fit a Gauss curve to signal y over a time series. 
         Returns optimal fit parameters popt as function of time
         """
 
+        if y is None: 
+            y = x
+            x = getattr(self,axis)
         if time is None: time = self.time
-        elif np.size(time) == 1: time = self.time[self.time >= time]
+        elif np.size(time) == 1: time = self.time[np.where(self.time >= time)]
         elif np.size(time) == 2: time = self.time[np.where((self.time >= time[0]) & (self.time <= time[1]))]
-        if p0 is None:
-            v0 = np.average(self.vel_planes['x'])
-            a = 2/3*v0
-            if y is None: x0 = np.average(getattr(self, axis))            
-            else: x0 = np.average(x)
-            if not hasattr(self,'unit') or self.unit == 'm':
-                sigma = 120
-            else:
-                sigma = 1
-            if fit == 'double': p0 = [v0, a, x0, sigma, sigma]
-            else: p0 = [v0, a, x0, sigma]
+        if len(np.shape(y)) < 2:
+            y = self.get_line_from_plane(y, time, z, axis, component, verbose)
 
-        popt = p0
+        if bounds is None: bounds = get_gauss_bounds(x, y, fit)
+
         parr = []
-        for n in range(len(time)):
-            popt = self.fit_gauss_to_wake_profile(x, y, popt, fit, time[n], z, axis, component, verbose)
+
+        for n,t in enumerate(time):
+            p0 = get_gauss_init_guess(x, y[n,:], fit, bounds)
+            popt = self.fit_gauss_to_wake_profile(x, y[n,:], p0, bounds, fit, t, 0, 'y', component, None, verbose)
+            if np.size(popt) == 1: 
+                popt = p0
+            p0 = popt
             parr.append(list(popt))
 
         return np.array(parr)
 
 
-    def track_wake_center_over_time(self, x, y = None, p0 = None, fit = 'double', timespan = None, z = 0, axis = 'y', component = 'u', ax = None, verbose = False):
+    def track_wake_center_over_time(self, x, y = None, p0 = None, bounds = None, fit = 'single', timespan = None, z = 0, axis = 'y', component = 'u', ax = None, verbose = False):
         """
         Tracks the wake centerline over time,
         based on the gaussian fit obtained with fit_gauss_to_time_series.
@@ -756,7 +748,8 @@ class Post_plane:
         if timespan is None: timespan = self.time
         elif np.size(timespan) == 1: timespan = self.time[self.time >= timespan]
         elif np.size(timespan) == 2: timespan = self.time[np.where((self.time >= timespan[0]) & (self.time <= timespan[1]))]
-        popt = self.fit_gauss_to_time_series(x, y, p0, fit, timespan, z, axis, component, verbose)
+        
+        popt = self.fit_gauss_to_time_series(x, y, p0, bounds, fit, timespan, z, axis, component, verbose)
 
         if ax:
             if not hasattr(ax, 'plot'): fig, ax = plt.subplots()
@@ -769,6 +762,72 @@ class Post_plane:
             return ax
         else:
             return popt[:,2]
+
+
+    def track_wake_center_over_distance(self, plane, x = None, x0 = 0, bounds = None, fit = 'single', time = None, axis = 'x', component = 'u', verbose = False):
+        """
+        Fit gaussian wake profile and track centerline along the wake.
+        """
+
+        if time is None: time = self.time[-1]
+        if x is None: x = getattr(self,'xy'['yx'.find(axis)])
+        idx = np.where(getattr(self, axis) > x0)[0]
+        if len(np.shape(plane)) < 2:
+            plane = self.get_plane(plane, time, component, verbose)
+
+        if bounds is None: bounds = get_gauss_bounds(x, plane, fit)
+ 
+        p0 = get_gauss_init_guess(x, plane[:,idx[0]], fit, bounds)
+        parr = []
+
+        for idxi in idx:
+            line = plane[:,idxi]
+            p0 = get_gauss_init_guess(x, line, fit, bounds)
+            popt = self.fit_gauss_to_wake_profile(x, line, p0, bounds, fit, time, 0, 'y', component, None, verbose)
+            if np.size(popt) == 1: 
+                popt = p0
+            p0 = popt
+            parr.append(list(popt))
+
+        return np.array(parr)[:,2]
+
+
+    def fit_gauss_2d(self, z, x = None, y = None, p0 = None, fit = 'single', bounds = None, time = None, component = 'u', verbose = False):
+        """
+        Fit gaussian wake profile to cross section of wake.
+        """
+        
+        if time is None: time = self.time[-1]
+        t_idx = self.get_time_index(time, verbose=verbose)
+        if x is None:
+            x = self.x
+        if y is None:
+            y = self.y
+        if np.size(z) == 1: 
+            z = self.get_plane(z, time, verbose=verbose)
+
+        if p0 is None:
+            v0 = np.max(self.vel_planes['x'])
+            a = np.max(self.vel_planes['x']) - np.min(self.vel_planes['x'])
+            x0 = np.average(x)
+            if self.unit == 'm': y0 = 150
+            else: y0 = 0.625
+            if self.unit == 'm': sigma = 120
+            else: sigma = 1
+            if fit == 'double': p0 = [v0, a, x0, y0, sigma/2, sigma/2]
+            else: p0 = [v0, a, x0, y0, sigma]
+
+        if np.size(x)*np.size(y) == np.size(z):
+            x, y = np.meshgrid(x, y)
+            
+        try: 
+            popt, pcov = curve_fit(gauss_func_2d, np.vstack((x.ravel(), y.ravel())), z.ravel(), p0, bounds=bounds)
+        except:
+            print(f'Warning! Optimal parameters not found at time {time}. Reverted to initial guess.')
+            popt = p0
+
+        return popt
+        
 
 ######################
 
@@ -820,4 +879,80 @@ def gauss_func(x, v0, a, x0, sigma, w = None):
         return v0 - a*np.exp(-(x-x0-w)**2/(2*sigma**2)) - a*np.exp(-(x-x0+w)**2/(2*sigma**2))
 
 
+def gauss_func_2d(X, v0, a, x0, y0, sigma = None, w = None):
+    """
+    Simple or double gaussian function:
+    Single:
+        y = v0 - a*exp( -( sqrt((x-x0)^2 + (y-y0))^2 )^2 / (2*sigma^2) )
+    Double:
+        v0 - a*np.exp( -( sqrt((x-x0)^2+(y-y0)^2)-w )^2/(2*sigma^2) ) - a*np.exp( -( np.sqrt((x-x0)^2+(y-y0)^2)+w )^2/(2*sigma^2) )
+
+    Args in:
+        X (array-like): [2,N]-sized array containing [x, y] vectors of length N
+        [v0, a, x0, y0, sigma, w] (floats): Gauss inputs
+            if w is not provided, single gaussian fit is applied
+
+    Args out: 
+        y (array): Gauss curve
+    """
+
+    x = X[:,0]
+    y = X[:,1]
+
+    if w is None:
+        return v0 - a*np.exp(-(np.sqrt((x-x0)**2+(y-y0)**2))**2/(2*sigma**2))
+    else: 
+        return v0 - a*np.exp(-(np.sqrt((x-x0)**2+(y-y0)**2)-w)**2/(2*sigma**2)) - a*np.exp(-(np.sqrt((x-x0)**2+(y-y0)**2)+w)**2/(2*sigma**2))
+
+
+def get_gauss_init_guess(x, y, fit = 'single', bounds = None):
+    """
+    Auxiliary function to get a first estimate of the Gaussian parameters
+    """
+
+    y_max = np.max([y[0], y[-1]])
+    y_min = np.min(y)
+    distribution = np.cumsum(y_max-y)/np.sum(y_max-y)
+    mu = x[np.where(distribution >= 0.5)[0][0]]
+    if fit == 'single':
+        sigma = (x[np.where(distribution >= 1-0.15865)[0][0]] - x[np.where(distribution >= 0.15865)[0][0]])/2
+        p0 = [y_max, y_max-y_min, mu, sigma]
+    else:
+        w = (x[np.where(distribution >= 1-0.25)[0][0]] - x[np.where(distribution >= 0.25)[0][0]])/2
+        sigma = (x[np.where(distribution >= 1-0.15865/2)[0][0]] - x[np.where(distribution >= 0.15865/2)[0][0]])/2 - w
+        p0 = [y_max, (y_max-y_min)/(1-(w-2*sigma)/2*sigma), mu, sigma, w]
+
+    if bounds:
+        p0 = np.min(np.array([np.max(np.array([bounds[0], p0]), axis=0), bounds[1]]), axis=0)
+
+    return p0
+
+
+def get_gauss_bounds(x, y, fit = 'single'):
+    """
+    Auxiliary function to set bounds on curve_fit
+    """
+
+    lb = [np.min(y), 0, np.min(x), 0]
+    ub = [np.max(y)+1, np.max(y)-np.min(y)+1, np.max(x), (np.max(x)-np.min(x))/2]
+    if fit == 'double': 
+        lb.append(0)
+        ub.append((np.max(x)-np.min(x))/2)
+    
+    return (lb, ub)
+
+
+def periodic_averaging(signal, time, num_bins, period, phase = 0):
+    
+    i0 = np.remainder(time + phase*period, period)/num_bins
+    p_mean = []
+    try:
+        axis = np.where(np.array(np.shape(signal)) == np.size(time))[0][0]
+    except:
+        raise AttributeError(f'Dimensions of input signal {np.shape(signal)} do not match those of time signal {np.shape(time)}')
+    
+    for n in range(num_bins):
+        idx = np.where((i0 >= n) & (i0 < n+1))
+        p_mean.append(np.mean(signal[idx], axis=axis))
         
+    return np.array(p_mean)
