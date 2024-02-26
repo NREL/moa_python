@@ -1,4 +1,4 @@
-# README.md
+# Kestrel Tunneling
 
 This subfolder demonstrates how to implement tunneling for jupyter notebooks into NREL's HPC system kestrel
 
