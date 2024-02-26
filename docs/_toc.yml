@@ -7,3 +7,4 @@ parts:
   - caption: Getting Started
     chapters:
     - file: installation
+    - file: kestrel_tunneling

@@ -20,13 +20,14 @@ REQUIRED = [
     'pytest',
     'seaborn',
     'netCDF4',
-    "jupyter"
+    "jupyter",
+    "scipy",
 ]
 
 EXTRAS = {
     "docs": {
-        "jupyter-book<=0.13.3",
-        "sphinx-book-theme",
+        "jupyter-book==0.14",
+        "sphinx-book-theme==0.4.0rc1",
         "sphinx-autodoc-typehints",
         "sphinxcontrib-autoyaml",
         "sphinxcontrib.mermaid",
@@ -39,11 +40,12 @@ EXTRAS = {
     },
 }
 
+
 ROOT = Path(__file__).parent
 with open(ROOT / "moa_python" / "version.py") as version_file:
     VERSION = version_file.read().strip()
 
-with open('README.rst') as readme_file:
+with open('README.md') as readme_file:
     README = readme_file.read()
 
 setup_requirements = [
