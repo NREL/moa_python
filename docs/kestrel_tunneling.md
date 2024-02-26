@@ -49,4 +49,4 @@ http://localhost:8888
 ```bash
 http://localhost:8888/?token=<Token>
 ```
-In the shell on kestrl
+In the shell on kestrl...
