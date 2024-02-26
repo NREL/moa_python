@@ -26,8 +26,8 @@ REQUIRED = [
 
 EXTRAS = {
     "docs": {
-        "jupyter-book<=0.13.3",
-        "sphinx-book-theme",
+        "jupyter-book==0.14",
+        "sphinx-book-theme==0.4.0rc1",
         "sphinx-autodoc-typehints",
         "sphinxcontrib-autoyaml",
         "sphinxcontrib.mermaid",
@@ -39,6 +39,7 @@ EXTRAS = {
         "isort",
     },
 }
+
 
 ROOT = Path(__file__).parent
 with open(ROOT / "moa_python" / "version.py") as version_file:
@@ -71,6 +72,7 @@ setup(
     },
     include_package_data=True,
     install_requires=REQUIRED,
+    extras_require=EXTRAS,
     license="Apache Software License 2.0",
     zip_safe=False,
     keywords='moa_python',
