@@ -148,10 +148,10 @@ class Post_abl_stats:
             t_max = np.max(self.time)
             
         # Check for out of bounds
-        if t_min < np.min(self.time):
-            raise ValueError(f'T_min ({t_min}) is less than the minimum time ({np.min(self.time)})')
-        if t_max > np.max(self.time):
-            raise ValueError(f'T_max ({t_max}) is greater than the maximum time ({np.max(self.time)})')
+        if t_min > np.max(self.time):
+            raise ValueError(f'T_min ({t_min}) is greater than the maximum time ({np.max(self.time)})')
+        if t_max < np.min(self.time):
+            raise ValueError(f'T_max ({t_max}) is smaller than the minimum time ({np.min(self.time)})')
         
         # Find time indices within time
         t_min_idx = np.argmax(self.time >= t_min, axis=0)
@@ -363,7 +363,7 @@ class Post_abl_stats:
         return wd
 
     
-    def plot_wind_direction_profile(self, t_min=None, t_max=None, ax=None, height=None):
+    def plot_wind_direction_profile(self, t_min=None, t_max=None, ax=None, height=None, offset=0):
         
         """
         Plot the wind direction profile over an averaging
@@ -382,11 +382,11 @@ class Post_abl_stats:
 
         wd = self.get_vertical_wind_direction_profile(t_min, t_max)
 
-        ax.plot(wd, self.z)
+        ax.plot(wd-offset, self.z)
         ax.set_xlabel("Wind direction [deg]")
         ax.set_ylabel("Height [m]")
-        xmin = np.min(wd)-1
-        xmax = (np.max(wd)+1)
+        xmin = np.min(wd)-1 - offset
+        xmax = (np.max(wd)+1) - offset
         ax.set_xlim([xmin, xmax])
         ax.grid(True)
         

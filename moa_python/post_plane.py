@@ -166,8 +166,46 @@ class Post_plane:
         i0 = self.get_time_index(timespan[0], verbose = verbose)
         iend = self.get_time_index(timespan[1], verbose = verbose)
         mean_plane = np.mean(self.vel_planes[component][i0:iend,:], axis=0)
+
         return mean_plane[z_idx*self.x_N*self.y_N:(z_idx+1)*self.x_N*self.y_N].reshape(self.y_N,self.x_N)
     
+
+    def get_vorticity(self, plane, time, orientation = 'xy', verbose=False):
+        """
+        Calculates vorticity in plane at given time
+
+        Args in:
+            plane (float): plane location
+            time (float): time to calculate vorticity at
+            orientation (str): orientation of the plane in xyz coordinates, default: xy
+        """
+
+        u = self.get_plane(plane, time, component = orientation[0], verbose=verbose)
+        v = self.get_plane(plane, time, component = orientation[1], verbose=verbose)
+        
+        return (np.diff(v,axis=1)/np.diff(self.x))[0:-1,:] - (np.diff(u,axis=0).T/np.diff(self.y)).T[:,0:-1]
+
+
+    def get_mean_vorticity(self, plane, timespan=None, orientation = 'xy', verbose=False):
+        """
+        Calculates vorticity in plane at given time
+
+        Args in:
+            plane (float): plane location
+            time (float): time to calculate vorticity at
+            orientation (str): orientation of the plane in xyz coordinates, default: xy
+        """
+
+        if timespan is None:
+            timespan = self.time
+        elif np.len(timespan) == 2:
+            timespan = [self.get_time_index(timespan[0]), self.get_time_index(timespan[-1])]
+
+        u = self.get_plane(plane, timespan, component = orientation[0], verbose=verbose)
+        v = self.get_plane(plane, timespan, component = orientation[1], verbose=verbose)
+
+        return np.mean((np.diff(v,axis=len(np.shape(v))-1)/np.diff(self.x))[:,0:-1:,] - \
+                (np.diff(u,axis=len(np.shape(u))-2).T/np.diff(self.y)[:, np.newaxis]).T[:,:,0:-1], axis=0)
 
     def get_line_from_plane(self, y, time = None, z = 0, axis = 'x', component = 'u', verbose = True):
         """
@@ -508,18 +546,18 @@ class Post_plane:
             Utube (np.array): average wind speed in wake (dimensions: squeeze(num_time_steps, num_x_coor, num_cases) )
         """
 
-        if z is None: z = self.z 
+        if z is None: z = list(self.z)
         if np.size(z) > 1:
             mean_vel = []
             for zi in z:
                 mean_vel.append(np.average(self.vel_in_wake(radius, turb_loc, zi, timespan, axis, component, verbose),axis=0))
         else: 
-            mean_vel = np.average(self.vel_in_wake(radius, turb_loc, z, timespan, axis, component, verbose),axis=0)
+            mean_vel = np.average(self.vel_in_wake(radius, turb_loc, z[0], timespan, axis, component, verbose),axis=0)
 
         return mean_vel
 
 
-    def plot_vel_in_wake(self, radius, turb_loc = [0,0,0], z = None, timespan = None, axis = 'x', component = 'u', ax = None, linestyle = '-', verbose = False):
+    def plot_vel_in_wake(self, radius, turb_loc = [0,0,0], z = None, timespan = None, axis = 'x', component = 'u', ax = None, linestyle = '-', color = None, verbose = False):
         """
         Plots average velocity in the wake using mean_vel_in_wake
 
@@ -536,28 +574,14 @@ class Post_plane:
         else:
             plt.sca(ax)
             fig = plt.gcf()
-        im = ax.plot(getattr(self, axis)-turb_loc['xyz'.find(axis)], line, linestyle)
+        if color is None:
+            color = 'C0'
+        im = ax.plot(getattr(self, axis)-turb_loc['xyz'.find(axis)], line, linestyle, color = color)
         ax.set_xlabel(f'X [{self.unit}]')
         ax.set_ylabel(f'Wind speed [m/s]')
         ax.grid(True)
 
         return ax
-    
-
-    def get_vorticity(self, plane, time, orientation = 'xy'):
-        """
-        Calculates vorticity in plane at given time
-
-        Args in:
-            plane (float): plane location
-            time (float): time to calculate vorticity at
-            orientation (str): orientation of the plane in xyz coordinates, default: xy
-        """
-
-        u = self.get_plane(plane, time, component = orientation[0])
-        v = self.get_plane(plane, time, component = orientation[1])
-        
-        return (np.diff(v,axis=1)/np.diff(self.x))[0:-1,:] - (np.diff(u,axis=0).T/np.diff(self.y)).T[:,0:-1]
 
 
     def periodic_averaging(self, signal, num_bins, period, poi=None, amplitude=None, offset=0):
@@ -593,6 +617,39 @@ class Post_plane:
         if verbose: print(f"Plotting vorticity for plane at location {plane} at time {time}")
 
         vorticity = self.get_vorticity(plane,time,orientation)
+
+        if ax is None:
+            fig, ax = plt.subplots()
+        else:
+            plt.sca(ax)
+            fig = plt.gcf()
+        im = ax.pcolor(self.x[0:-1], self.y[0:-1], vorticity, vmin=vmin, vmax=vmax)
+        ax.set_xlabel(f'X [{self.unit}]')
+        ax.set_ylabel(f'Y [{self.unit}]')
+        ax.set_aspect('equal')
+
+        fig.colorbar(im,ax=ax,location='bottom')
+
+        return ax
+
+
+    def plot_mean_vorticity(self, plane, timespan=None, orientation='xy', ax=None, vmin=None, vmax=None, verbose=False):
+        """
+        Plot vorticity over a plane at a particular slice and time
+        
+        Args in:
+            plane (float): the z-coordinate of the plane to plot
+            time (float): the time to plot
+            orientation (str): orientation of the plane in xyz coordinates, default: xy
+            ax (:py:class:'matplotlib.pyplot.axes', optional):
+                figure axes. Defaults to None.
+            vmin (float, optional) minimum value in colorbar
+            vmax (float, optional) maximum value in colorbar
+        """
+
+        if verbose: print(f"Plotting vorticity for plane at location {plane} at time {time}")
+
+        vorticity = self.get_mean_vorticity(plane,timespan,orientation,verbose)
 
         if ax is None:
             fig, ax = plt.subplots()
@@ -922,8 +979,8 @@ def get_gauss_init_guess(x, y, fit = 'single', bounds = None):
         sigma = (x[np.where(distribution >= 1-0.15865/2)[0][0]] - x[np.where(distribution >= 0.15865/2)[0][0]])/2 - w
         p0 = [y_max, (y_max-y_min)/(1-(w-2*sigma)/2*sigma), mu, sigma, w]
 
-    if bounds:
-        p0 = np.min(np.array([np.max(np.array([bounds[0], p0]), axis=0), bounds[1]]), axis=0)
+    #if bounds:
+    #    p0 = np.min(np.array([np.max(np.array([bounds[0], p0]), axis=0), bounds[1]]), axis=0)
 
     return p0
 
