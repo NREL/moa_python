@@ -632,7 +632,6 @@ class Post_plane:
 
         return ax
 
-
     def plot_mean_vorticity(self, plane, timespan=None, orientation='xy', ax=None, vmin=None, vmax=None, verbose=False):
         """
         Plot vorticity over a plane at a particular slice and time
@@ -664,7 +663,6 @@ class Post_plane:
         fig.colorbar(im,ax=ax,location='bottom')
 
         return ax
-
 
     def fit_gauss_to_wake_profile(self, x, y = None, p0 = None, bounds = None, fit = 'single', time = None, z = 0, axis = 'y', component = 'u', ax = None, verbose = False):
         """
@@ -979,8 +977,8 @@ def get_gauss_init_guess(x, y, fit = 'single', bounds = None):
         sigma = (x[np.where(distribution >= 1-0.15865/2)[0][0]] - x[np.where(distribution >= 0.15865/2)[0][0]])/2 - w
         p0 = [y_max, (y_max-y_min)/(1-(w-2*sigma)/2*sigma), mu, sigma, w]
 
-    #if bounds:
-    #    p0 = np.min(np.array([np.max(np.array([bounds[0], p0]), axis=0), bounds[1]]), axis=0)
+    if bounds:
+        p0 = np.min(np.array([np.max(np.array([bounds[0], p0]), axis=0), bounds[1]]), axis=0)
 
     return p0
 
