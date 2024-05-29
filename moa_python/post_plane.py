@@ -10,7 +10,7 @@ class Post_plane:
     To do for future: make it compatible for different plane groups.
     """
     
-    def __init__(self, filename, freq = 1, verbose = True, origin = None, flip = False):
+    def __init__(self, filename, planes = None, freq = 1, verbose = True, origin = None, flip = False):
         
         # Save the filename
         self.filename = filename
@@ -19,34 +19,42 @@ class Post_plane:
         self.dataset = ncdf.Dataset(filename)
         
         # Read time
-        indices = np.arange(0,self.dataset.dimensions['num_time_steps'].size,freq)
+        indices = np.arange(0,self.dataset.dimensions['num_time_steps'].size, freq)
         self.time = np.array(self.dataset.variables['time'][indices])
         self.num_time_steps = len(self.time)
 
         # Save the x and y dimensions
-        self.plane = list(self.dataset.groups.keys())[0] # TODO: make compatible for multiple planes within one dataset?
-        self.x_N = self.dataset.groups[self.plane].ijk_dims[0]
-        self.y_N = self.dataset.groups[self.plane].ijk_dims[1]
-        self.x_max = np.sqrt(sum(entry**2 for entry in self.dataset.groups[self.plane].axis1))
-        self.y_max = np.sqrt(sum(entry**2 for entry in self.dataset.groups[self.plane].axis2))
-        self.x_dir = self.dataset.groups[self.plane].axis1/self.x_max
-        self.y_dir = self.dataset.groups[self.plane].axis2/self.y_max
-        self.z_dir = self.dataset.groups[self.plane].axis3
+        if planes is None:
+            self.plane = list(self.dataset.groups.keys())
+        elif isinstance(planes, str): 
+            self.plane = list(planes)
+        self.x_N = self.dataset.groups[self.plane[0]].ijk_dims[0]
+        self.y_N = self.dataset.groups[self.plane[0]].ijk_dims[1]
+        self.x_max = np.sqrt(sum(entry**2 for entry in self.dataset.groups[self.plane[0]].axis1))
+        self.y_max = np.sqrt(sum(entry**2 for entry in self.dataset.groups[self.plane[0]].axis2))
+        self.x_dir = self.dataset.groups[self.plane[0]].axis1/self.x_max
+        self.y_dir = self.dataset.groups[self.plane[0]].axis2/self.y_max
+        self.z_dir = self.dataset.groups[self.plane[0]].axis3
         self.x = np.linspace(0, self.x_max, self.x_N)
         self.y = np.linspace(0, self.y_max, self.y_N)
         self.unit = 'm'
 
         # Save the number of planes 
-        self.z = self.get_plane_location(origin)
-        if not isinstance(self.z,np.ndarray): self.z = np.array([self.z])
-        self.z_N = len(self.z)
+        self.z = self.get_plane_location(origin, self.plane[0])
 
         # Save the velocity planes
         self.vel_planes = dict()
-        self.vel_planes['x'] = np.array(self.dataset.groups[self.plane].variables['velocityx'][indices,:])
-        self.vel_planes['y'] = np.array(self.dataset.groups[self.plane].variables['velocityy'][indices,:])
-        self.vel_planes['z'] = np.array(self.dataset.groups[self.plane].variables['velocityz'][indices,:])
+        self.vel_planes['x'] = np.array(self.dataset.groups[self.plane[0]].variables['velocityx'][indices,:])
+        self.vel_planes['y'] = np.array(self.dataset.groups[self.plane[0]].variables['velocityy'][indices,:])
+        self.vel_planes['z'] = np.array(self.dataset.groups[self.plane[0]].variables['velocityz'][indices,:])
+
+        if len(self.plane) > 1:
+            self.append_additional_planes(origin, indices)
+
         self.vel_planes['u'] = np.sqrt(self.vel_planes['x']**2 + self.vel_planes['y']**2)
+
+        if not isinstance(self.z,np.ndarray): self.z = np.array([self.z])
+        self.z_N = len(self.z)
         
         # Print a quick summary
         if verbose: self.summary()
@@ -56,23 +64,36 @@ class Post_plane:
         Print out a brief summary of the plane
         """
         
-        print(f"Plane has {self.z_N} plane(s) in {self.num_time_steps} time steps from {self.time[0]} to {self.time[-1]}")
+        print(f"Plane has {self.z_N} plane(s) in {self.num_time_steps} time steps from {np.round(self.time[0])} to {np.round(self.time[-1])}")
         print(f"Plane offsets: {self.z}")
 
 
-    def get_plane_location(self,reference = None):
+    def append_additional_planes(self, origin, indices):
+        """
+        Append self if there is more than one plane in a group.
+        """
+
+        for plane in self.plane[1:]:
+            self.z = np.append(self.z, self.get_plane_location(origin, plane))
+            self.vel_planes['x'] = np.append(self.vel_planes['x'], np.array(self.dataset.groups[plane].variables['velocityx'][indices,:]), axis=1)
+            self.vel_planes['y'] = np.append(self.vel_planes['y'], np.array(self.dataset.groups[plane].variables['velocityy'][indices,:]), axis=1)
+            self.vel_planes['z'] = np.append(self.vel_planes['z'], np.array(self.dataset.groups[plane].variables['velocityz'][indices,:]), axis=1)
+
+
+    def get_plane_location(self, reference = None, plane = None):
         """
         Return the location of a plane in the third dimension of the defined coordinate system.
 
         Args in:
             reference (list??): x, y and z-coordinates in AMR-Wind grid w.r.t. which to calculate plane location, default: [0, 0, 0]
         """
-
-        if reference is None: 
-            reference = 0
-        else: 
-            reference = sum((self.dataset.groups[self.plane].origin-reference)*self.z_dir)
-        self.z = reference + self.dataset.groups[self.plane].offsets
+        if plane is None: plane = self.plane
+        if isinstance(plane, (list, tuple, np.ndarray)): 
+            print(f"WARNING: More than one plane is provided. Outputting location of plane '{plane[0]}'")
+            plane = plane[0]
+        if reference is None: reference = 0
+        reference = sum((self.dataset.groups[plane].origin-reference)*self.z_dir)
+        self.z = reference + self.dataset.groups[plane].offsets
 
         return self.z
 
@@ -239,7 +260,7 @@ class Post_plane:
                     .reshape(np.size(t_idx),self.y_N,self.x_N)[np.ix_(np.arange(np.size(t_idx)),idx_y,idx_x)])
 
 
-    def mean_vel_in_circle(self, origin, radius, z = None, time = None, component = 'u', verbose = True):
+    def mean_vel_in_circle(self, origin, D, z = None, time = None, component = 'u', verbose = True):
         """
         Outputs the mean velocity over an area of the flow field
         Args in:
@@ -258,7 +279,7 @@ class Post_plane:
         else: z_idx = self.get_plane_index(z, verbose = verbose)
 
         x_coor, y_coor = np.meshgrid(self.x, self.y)
-        idx = np.squeeze(np.where((np.reshape(x_coor,-1)-origin[0])**2 + (np.reshape(y_coor,-1)-origin[1])**2 < radius**2))
+        idx = np.squeeze(np.where((np.reshape(x_coor,-1)-origin[0])**2 + (np.reshape(y_coor,-1)-origin[1])**2 < (D/2)**2))
  
         return np.average(self.vel_planes[component][np.ix_(t_idx, z_idx*self.x_N*self.y_N+idx)], axis=1)
 
@@ -504,7 +525,7 @@ class Post_plane:
                     [hub_height+turb_loc[1]-rot_diam/2*np.cos(angle),hub_height+turb_loc[1]+rot_diam/2*np.cos(angle)],'k',linewidth=1.5)
 
 
-    def vel_in_wake(self, radius, turb_loc = None, z = None, time = None, axis = 'x', component = 'u', verbose = True):
+    def vel_in_wake(self, D, turb_loc = None, z = None, time = None, axis = 'x', component = 'u', verbose = True):
         """
         Calculates velocity in the wake of a turbine
         
@@ -519,34 +540,36 @@ class Post_plane:
             Utube (np.array): average wind speed in wake (dimensions: squeeze(num_time_steps, num_x_coor, num_cases) )
         """
 
+        radius = D/2
+
         if turb_loc is None: turb_loc = [np.average(self.x), np.average(self.y), self.z[0]]
-        if z is None: z = self.z[0]
+        if z is None: z = turb_loc[2]
 
         if axis == 'x':
-            xyrange = self.y[np.where((self.y-turb_loc[1])**2 + (self.z-z)**2 < radius**2)]
-            return np.average(self.get_line_from_plane(xyrange, time, z, axis, component, verbose), axis=1)
+            xyrange = self.y[np.where((self.y-turb_loc[1])**2 + (z-turb_loc[2])**2 < radius**2)]
+            return np.average(self.get_line_from_plane(xyrange, time, turb_loc[2], axis, component, verbose), axis=1)
         elif axis == 'y':
-            xyrange = self.x[np.where((self.x-turb_loc[0])**2 + (self.z-z)**2 < radius**2)]
-            return np.average(self.get_line_from_plane(xyrange, time, z, axis, component, verbose), axis=1)
+            xyrange = self.x[np.where((self.x-turb_loc[0])**2 + (z-turb_loc[2])**2 < radius**2)]
+            return np.average(self.get_line_from_plane(xyrange, time, turb_loc[2], axis, component, verbose), axis=1)
         else:
             return self.mean_vel_in_circle(turb_loc, radius, z, time, component, verbose)
 
 
-    def mean_vel_in_wake(self, radius, turb_loc = None, z = None, timespan = None, axis = 'x', component = 'u', verbose = True):
+    def mean_vel_in_wake(self, D, turb_loc = None, z = None, timespan = None, axis = 'x', component = 'u', verbose = True):
         """
         Calculates average velocity in the wake of a turbine
-        
+
         Args in:
             hub_heigth (float): turbine hub height in m
             rot_diam (float): turbine rotor diameter in m
             turb_loc (list): x- and y- location of the turbine in m (default: [0, 0])
             dir (str): direction of the plane, either 'streamwise' (default) or 'slice' (i.e., cut-through of the flow)
-        
+
         Args out:
             Utube (np.array): average wind speed in wake (dimensions: squeeze(num_time_steps, num_x_coor, num_cases) )
         """
 
-        if z is None: z = list(self.z)
+        if z is None: z = self.z
         if np.size(z) > 1:
             mean_vel = []
             for zi in z:
@@ -557,7 +580,7 @@ class Post_plane:
         return mean_vel
 
 
-    def plot_vel_in_wake(self, radius, turb_loc = [0,0,0], z = None, timespan = None, axis = 'x', component = 'u', ax = None, linestyle = '-', color = None, verbose = False):
+    def plot_vel_in_wake(self, D, turb_loc = [0,0,0], z = None, timespan = None, axis = 'x', component = 'u', ax = None, linestyle = '-', color = None, verbose = False):
         """
         Plots average velocity in the wake using mean_vel_in_wake
 
@@ -565,7 +588,7 @@ class Post_plane:
             ax: axis to plot on, default: None (creates new figure)
         """
 
-        line = self.mean_vel_in_wake(radius, turb_loc, z, timespan, axis, component, verbose)
+        line = self.mean_vel_in_wake(D, turb_loc, z, timespan, axis, component, verbose)
 
         if verbose: print(f"Plotting average {component} wake velocity for plane ({axis})")
 
@@ -576,7 +599,11 @@ class Post_plane:
             fig = plt.gcf()
         if color is None:
             color = 'C0'
-        im = ax.plot(getattr(self, axis)-turb_loc['xyz'.find(axis)], line, linestyle, color = color)
+
+        try:
+            im = ax.plot(getattr(self, axis)-turb_loc['xyz'.find(axis)], line, linestyle, color = color)
+        except:
+            im = ax.plot(getattr(self, axis)-turb_loc['xyz'.find(axis)], np.transpose(line), linestyle, color = color)
         ax.set_xlabel(f'X [{self.unit}]')
         ax.set_ylabel(f'Wind speed [m/s]')
         ax.grid(True)
@@ -597,7 +624,7 @@ class Post_plane:
             bins = np.linspace(min(signal), max(signal),num_bins)[1:-1]
             bin_indices = np.digitize(signal,bins)
 
-        return signal_in_bins, bins
+        return bins # signals_in_bins
 
 
     def plot_vorticity(self, plane, time, orientation='xy', ax=None, vmin=None, vmax=None, verbose = True):
@@ -646,7 +673,7 @@ class Post_plane:
             vmax (float, optional) maximum value in colorbar
         """
 
-        if verbose: print(f"Plotting vorticity for plane at location {plane} at time {time}")
+        if verbose: print(f"Plotting vorticity for plane at location {plane} at time {timespan}")
 
         vorticity = self.get_mean_vorticity(plane,timespan,orientation,verbose)
 
