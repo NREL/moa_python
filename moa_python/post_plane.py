@@ -552,7 +552,7 @@ class Post_plane:
             xyrange = self.x[np.where((self.x-turb_loc[0])**2 + (z-turb_loc[2])**2 < radius**2)]
             return np.average(self.get_line_from_plane(xyrange, time, turb_loc[2], axis, component, verbose), axis=1)
         else:
-            return self.mean_vel_in_circle(turb_loc, radius, z, time, component, verbose)
+            return self.mean_vel_in_circle(turb_loc, D, z, time, component, verbose)
 
 
     def mean_vel_in_wake(self, D, turb_loc = None, z = None, timespan = None, axis = 'x', component = 'u', verbose = True):
@@ -573,9 +573,9 @@ class Post_plane:
         if np.size(z) > 1:
             mean_vel = []
             for zi in z:
-                mean_vel.append(np.average(self.vel_in_wake(radius, turb_loc, zi, timespan, axis, component, verbose),axis=0))
+                mean_vel.append(np.average(self.vel_in_wake(D, turb_loc, zi, timespan, axis, component, verbose),axis=0))
         else: 
-            mean_vel = np.average(self.vel_in_wake(radius, turb_loc, z[0], timespan, axis, component, verbose),axis=0)
+            mean_vel = np.average(self.vel_in_wake(D, turb_loc, z, timespan, axis, component, verbose),axis=0)
 
         return mean_vel
 
