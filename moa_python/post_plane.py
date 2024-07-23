@@ -51,10 +51,12 @@ class Post_plane:
         if len(self.plane) > 1:
             self.append_additional_planes(origin, indices)
 
-        self.vel_planes['u'] = np.sqrt(self.vel_planes['x']**2 + self.vel_planes['y']**2)
-
         if not isinstance(self.z,np.ndarray): self.z = np.array([self.z])
         self.z_N = len(self.z)
+
+        if flip: self.flip_planes(flip)
+
+        self.vel_planes['u'] = np.sqrt(self.vel_planes['x']**2 + self.vel_planes['y']**2)
         
         # Print a quick summary
         if verbose: self.summary()
@@ -78,6 +80,29 @@ class Post_plane:
             self.vel_planes['x'] = np.append(self.vel_planes['x'], np.array(self.dataset.groups[plane].variables['velocityx'][indices,:]), axis=1)
             self.vel_planes['y'] = np.append(self.vel_planes['y'], np.array(self.dataset.groups[plane].variables['velocityy'][indices,:]), axis=1)
             self.vel_planes['z'] = np.append(self.vel_planes['z'], np.array(self.dataset.groups[plane].variables['velocityz'][indices,:]), axis=1)
+
+
+    def flip_planes(self, axis):
+        """
+        Flips planes around a specified axis 'x' and/or 'y'.
+        """
+
+        plane_x = self.vel_planes['x'].reshape(self.num_time_steps, self.z_N, self.y_N, self.x_N)
+        plane_y = self.vel_planes['y'].reshape(self.num_time_steps, self.z_N, self.y_N, self.x_N)
+        plane_z = self.vel_planes['z'].reshape(self.num_time_steps, self.z_N, self.y_N, self.x_N)
+
+        if 'x' in axis:
+            plane_x = np.flip(plane_x, axis=3)
+            plane_y = np.flip(plane_y, axis=3)
+            plane_z = np.flip(plane_z, axis=3)
+        if 'y' in axis:
+            plane_x = np.flip(plane_x, axis=2)
+            plane_y = np.flip(plane_y, axis=2)
+            plane_z = np.flip(plane_z, axis=2)
+
+        self.vel_planes['x'] = plane_x.reshape(self.num_time_steps, self.z_N*self.y_N*self.x_N)
+        self.vel_planes['y'] = plane_y.reshape(self.num_time_steps, self.z_N*self.y_N*self.x_N)
+        self.vel_planes['z'] = plane_z.reshape(self.num_time_steps, self.z_N*self.y_N*self.x_N)
 
 
     def get_plane_location(self, reference = None, plane = None):
@@ -142,7 +167,7 @@ class Post_plane:
         return t_idx
 
 
-    def get_plane(self, plane, time, component = 'u', verbose = True):
+    def get_plane(self, plane, time = None, component = 'u', verbose = True):
         """
         Get a plane at particular location and time
         
@@ -155,6 +180,8 @@ class Post_plane:
         Args out:
             data (not sure): the plane
         """
+
+        if time is None: time = self.time[-1]
 
         z_idx = self.get_plane_index(plane, verbose = verbose)
         t_idx = self.get_time_index(time, verbose = verbose)
@@ -189,6 +216,14 @@ class Post_plane:
         mean_plane = np.mean(self.vel_planes[component][i0:iend,:], axis=0)
 
         return mean_plane[z_idx*self.x_N*self.y_N:(z_idx+1)*self.x_N*self.y_N].reshape(self.y_N,self.x_N)
+        
+
+    # def mirror_plane(self, axis='x'):
+    #     """
+    #     Mirrors a plane about a defined axis.
+    #     """
+
+    #     setattr(self, axis, getattr(self, axis)[::-1])
     
 
     def get_vorticity(self, plane, time, orientation = 'xy', verbose=False):
@@ -227,6 +262,7 @@ class Post_plane:
 
         return np.mean((np.diff(v,axis=len(np.shape(v))-1)/np.diff(self.x))[:,0:-1:,] - \
                 (np.diff(u,axis=len(np.shape(u))-2).T/np.diff(self.y)[:, np.newaxis]).T[:,:,0:-1], axis=0)
+    
 
     def get_line_from_plane(self, y, time = None, z = 0, axis = 'x', component = 'u', verbose = True):
         """
@@ -348,6 +384,32 @@ class Post_plane:
             self.y = self.y - (normal[0]*shift_in_origin[1]-normal[1]*shift_in_origin[0])
 
 
+    def set_origin_simple(self, x, y = 0, z = 0, frame = 'relative'):
+            """
+            Sets origin of the plane
+            """
+
+            if isinstance(x, list):
+                if len(x) == 2:
+                    y = x[1]
+                    x = x[0]
+                elif len(x) == 3:
+                    z = x[2]
+                    y = x[1]
+                    x = x[0]
+                else:
+                    raise AttributeError(f"Input 'x' should be a float or a list of size 2 or 3. Current size is {len(x)}")
+
+            if frame == 'relative':
+                self.x = self.x - x
+                self.y = self.y - y
+                self.z = self.z - z
+            elif frame == 'absolute':
+                self.x = self.x - self.x[0] - x
+                self.y = self.y - self.y[0] - y
+                self.z = self.z - self.z[0] - z
+
+
     def scale_to_rot_diam(self,rot_diam):
         """
         Scales all axes to rotor diameter. 
@@ -365,7 +427,7 @@ class Post_plane:
             print('WARNING: Field already scaled to rotor diameter. Nothing happened.')
 
 
-    def plot_plane(self, z, time, component = 'u', ax = None, vmin = None, vmax = None, verbose = True):
+    def plot_plane(self, z, time = None, component = 'u', ax = None, vmin = None, vmax = None, xlim=None, ylim=None, verbose = True):
         """
         Plot a plane at a particular slice and time
         
@@ -379,7 +441,12 @@ class Post_plane:
             vmax (float, optional) maximum value in colorbar
         """
 
-        if verbose: print(f"Plotting {component} velocity for plane at location {z} at time {time}")
+        if time is None: time = self.time[-1]
+        if verbose: 
+            if len(z) == 1: 
+                print(f"Plotting {component} velocity for plane at location {z} at time {time}")
+            else: 
+                print(f"Plotting {component} velocity for provided plane")
 
         if len(np.shape(z)) < 2:
             z = self.get_plane(z, time, component, verbose = verbose)
@@ -396,12 +463,15 @@ class Post_plane:
         ax.set_ylabel(f'Y [{self.unit}]')
         ax.set_aspect('equal')
 
+        if xlim is not None: ax.set_xlim(xlim)
+        if ylim is not None: ax.set_ylim(ylim)
+
         if plot_cbar: fig.colorbar(im,ax=ax,location='bottom')
 
         return ax
 
 
-    def plot_mean_plane(self, z, component = 'u', fig = None, ax = None, vmin=None, vmax=None, timespan=None, verbose = True):
+    def plot_mean_plane(self, z, component = 'u', fig = None, ax = None, vmin=None, vmax=None, timespan=None, xlim=None, ylim=None, verbose = True):
         """
         Plot the mean plane at a particular height and time
         
@@ -429,6 +499,9 @@ class Post_plane:
         ax.set_xlabel(f'X [{self.unit}]')
         ax.set_ylabel(f'Y [{self.unit}]')
         ax.set_aspect('equal')
+
+        if xlim is not None: ax.set_xlim(xlim)
+        if ylim is not None: ax.set_ylim(ylim)
 
         if plot_cbar: fig.colorbar(im,ax=ax,location='bottom')
 
@@ -608,7 +681,7 @@ class Post_plane:
         ax.set_ylabel(f'Wind speed [m/s]')
         ax.grid(True)
 
-        return ax
+        return line
 
 
     def periodic_averaging(self, signal, num_bins, period, poi=None, amplitude=None, offset=0):
@@ -716,7 +789,7 @@ class Post_plane:
             if time is None: time = self.time[-1]
             y = self.get_line_from_plane(y, time, z, axis, component, verbose)
 
-        if bounds is None: bounds = get_gauss_bounds(x, y, p0)
+        if bounds is None: bounds = get_gauss_bounds(x, y, fit)
         if p0 is None: p0 = get_gauss_init_guess(x, y, fit, bounds)
 
         try: 
@@ -725,7 +798,8 @@ class Post_plane:
                 if not hasattr(ax, 'plot'): fig, ax = plt.subplots()
                 ax = self.plot_gauss_fit(x, y, popt, p0, ax)
         except:
-            popt = -1
+            popt = p0
+            print(f'Warning! Optimal parameters not found. Reverted to initial guess.')
             
         return popt
 
@@ -761,12 +835,73 @@ class Post_plane:
         try: 
             popt, pcov = curve_fit(gauss_func, x, y, p0, bounds=bounds)
         except:
-            popt = -1
+            popt = p0
+            print(f'Warning! Optimal parameters not found. Reverted to initial guess.')
         
         if ax:
             ax = self.plot_gauss_fit(x, y, popt, p0, ax)
 
         return popt
+    
+
+    def get_wake_center_from_cross_section(self, plane, xbounds = None, ybounds = None, fit = 'single', time = None, shear_correction = True, ax = None, plot_lines = False, verbose = False):
+        """
+        Fit both a horizontal and vertical gaussian to each line in a cross-section.
+        Returns the (x, y)-location of the center of the wake, i.e., where the horizontal and vertical fit cross.
+        """
+
+        if np.size(plane) == 1:
+            plane = self.get_plane(plane, time, verbose=verbose)
+            
+        if xbounds is None:
+            xbounds = [self.x[0], self.x[-1]]
+        if ybounds is None:
+            ybounds = [self.y[0], self.y[-1]]
+
+        xind = np.argwhere((self.x > xbounds[0]) & (self.x < xbounds[1]))
+        x_ = self.x[xind][:,0]
+
+        yind = np.argwhere((self.y > ybounds[0]) & (self.y < ybounds[1]))
+        y_ = self.y[yind][:,0]
+
+        wake_center_x = []
+        for yi in yind:
+            line = plane[int(yi),:]
+            popt = self.fit_gauss_to_wake_profile(self.x, line, fit=fit)
+            wake_center_x.append(popt[2])
+            
+        wake_center_y = []
+        if shear_correction:
+            shear = np.mean(plane, axis=1)
+        else: 
+            shear = 0
+            
+        for xi in xind:
+            line = plane[:,int(xi)]-shear
+            popt = self.fit_gauss_to_wake_profile(self.y, line, fit=fit)
+            wake_center_y.append(popt[2])
+            
+        indices, values = find_min_distance(x_, wake_center_y, wake_center_x, y_)
+
+        yint_ = np.linspace(y_[np.max([int(indices[0]-1), 0])], 
+                            y_[np.min([int(indices[0]+1), int(len(y_)-1)])], 100)
+        xint_ = np.linspace(wake_center_x[np.max([int(indices[0]-1), 0])], 
+                                    wake_center_x[np.min([int(indices[0]+1), int(len(wake_center_x)-1)])], 100)
+        
+        xint = np.interp(yint_, y_, wake_center_x)
+        yint = np.interp(xint_, x_, wake_center_y)
+
+        indices, values = find_min_distance(xint_, yint, xint, yint_)
+        
+        if ax:
+            if not hasattr(ax, 'plot'): fig, ax = plt.subplots()
+            self.plot_plane(plane, ax = ax)
+            if plot_lines:
+                ax.plot(wake_center_x, y_, 'w')
+                ax.plot(x_, wake_center_y, 'w')
+            ax.plot(values[0], values[1],'wo')
+
+        return values
 
 
     def plot_gauss_fit(self, x, y, popt, p0 = None, ax = None):
@@ -997,7 +1132,7 @@ def get_gauss_init_guess(x, y, fit = 'single', bounds = None):
     distribution = np.cumsum(y_max-y)/np.sum(y_max-y)
     mu = x[np.where(distribution >= 0.5)[0][0]]
     if fit == 'single':
-        sigma = (x[np.where(distribution >= 1-0.15865)[0][0]] - x[np.where(distribution >= 0.15865)[0][0]])/2
+        sigma = abs((x[np.where(distribution >= 1-0.15865)[0][0]] - x[np.where(distribution >= 0.15865)[0][0]])/2)
         p0 = [y_max, y_max-y_min, mu, sigma]
     else:
         w = (x[np.where(distribution >= 1-0.25)[0][0]] - x[np.where(distribution >= 0.25)[0][0]])/2
@@ -1038,3 +1173,24 @@ def periodic_averaging(signal, time, num_bins, period, phase = 0):
         p_mean.append(np.mean(signal[idx], axis=axis))
         
     return np.array(p_mean)
+
+
+def find_min_distance(x1, y1, x2, y2):
+    """
+    Finds the x- and y-values that are closest to each other.
+    """
+
+    from math import dist
+    mindist = np.inf
+
+    for x, y in zip(x1, y1):
+        for xi, yi in zip(x2, y2):
+            distance = dist([x, y], [xi, yi])
+            if distance < mindist:
+                mindist = distance
+                coordinates = [np.where(x2 == xi)[0][0], np.where(x1 == x)[0][0]]
+                
+    values = [np.mean([x1[coordinates[1]], x2[coordinates[0]]]), 
+              np.mean([y1[coordinates[1]], y2[coordinates[0]]])]
+    
+    return coordinates, values
