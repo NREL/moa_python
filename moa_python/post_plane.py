@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import netCDF4 as ncdf
 from scipy.optimize import curve_fit
+from scipy.ndimage import gaussian_filter
 
 class Post_plane:
     """
@@ -10,7 +11,7 @@ class Post_plane:
     To do for future: make it compatible for different plane groups.
     """
     
-    def __init__(self, filename, planes = None, freq = 1, verbose = True, origin = None, flip = False):
+    def __init__(self, filename, planes = None, freq = 1, origin = None, flip = False, verbose = True):
         
         # Save the filename
         self.filename = filename
@@ -105,6 +106,15 @@ class Post_plane:
         self.vel_planes['z'] = plane_z.reshape(self.num_time_steps, self.z_N*self.y_N*self.x_N)
 
 
+    def set_turbine_whereabouts(self, D, turb_loc):
+        """
+        Sets turbine location and diameter for later use.
+        """
+
+        self.D = D
+        self.turb_loc = turb_loc
+
+
     def get_plane_location(self, reference = None, plane = None):
         """
         Return the location of a plane in the third dimension of the defined coordinate system.
@@ -140,7 +150,7 @@ class Post_plane:
                 z_idx.append(np.argmin(np.abs(getattr(self,plane) - zi)))
         except:
             z_idx = np.argmin(np.abs(getattr(self,plane) - z))
-        if verbose: print(f'Nearest point to {z} is {getattr(self,plane)[z_idx]}')
+        if verbose: print(f'Nearest plane to {z} is {getattr(self,plane)[z_idx]}')
 
         return z_idx
 
@@ -296,13 +306,25 @@ class Post_plane:
                     .reshape(np.size(t_idx),self.y_N,self.x_N)[np.ix_(np.arange(np.size(t_idx)),idx_y,idx_x)])
 
 
-    def mean_vel_in_circle(self, origin, D, z = None, time = None, component = 'u', verbose = True):
+    def mean_vel_in_circle(self, origin = None, D = None, z = None, time = None, component = 'u', verbose = True):
         """
         Outputs the mean velocity over an area of the flow field
         Args in:
             origin (array): origin location of the area, in format [x0, y0]
-            x (float): 
+            D (float): 
         """
+
+        if origin is None:
+            try:
+                origin = self.turb_loc
+            except ValueError:
+                print("No origin and/or diameter was defined. Please run 'set_turbine_whereabouts' first or provide inputs 'origin' and 'D'.")
+
+        if D is None:
+            try:
+                D = self.D
+            except ValueError:
+                print("No origin and/or diameter was defined. Please run 'set_turbine_whereabouts' first or provide inputs 'origin' and 'D'.")
 
         if time is None:
             time = self.time
@@ -410,7 +432,7 @@ class Post_plane:
                 self.z = self.z - self.z[0] - z
 
 
-    def scale_to_rot_diam(self,rot_diam):
+    def scale_to_rot_diam(self, D = None):
         """
         Scales all axes to rotor diameter. 
 
@@ -418,13 +440,21 @@ class Post_plane:
             rot_diam: rotor diameter in m
         """
 
+        if D is None:
+            try:
+                D = self.D
+            except ValueError:
+                print("No diameter was defined. Please run 'set_turbine_whereabouts' first or provide input 'D'.")
+
         if self.unit == 'm':
-            self.x = self.x/rot_diam
-            self.y = self.y/rot_diam
-            self.z = self.z/rot_diam
+            self.x = self.x/D
+            self.y = self.y/D
+            self.z = self.z/D
             self.unit = 'D'
+            self.real_D = D
+            self.D = 1
         else:
-            print('WARNING: Field already scaled to rotor diameter. Nothing happened.')
+            print('WARNING: Field already scaled to rotor diameter. Nothing happened...')
 
 
     def plot_plane(self, z, time = None, component = 'u', ax = None, vmin = None, vmax = None, xlim=None, ylim=None, verbose = True):
@@ -443,7 +473,7 @@ class Post_plane:
 
         if time is None: time = self.time[-1]
         if verbose: 
-            if len(z) == 1: 
+            if np.size(z) == 1: 
                 print(f"Plotting {component} velocity for plane at location {z} at time {time}")
             else: 
                 print(f"Plotting {component} velocity for provided plane")
@@ -570,7 +600,7 @@ class Post_plane:
         return ax
 
     
-    def plot_turbine(self, hub_height=150/240, rot_diam=1, turb_loc=[0,0], angle = 0, ax=None, plane='xy'):
+    def plot_turbine(self, D = None, turb_loc = None, angle = 0, ax=None, plane='xy'):
         """
         Plot the turbine location in the flow field
 
@@ -584,21 +614,33 @@ class Post_plane:
             plane (string): plane in which to plot turbine ('xy', 'yz', or 'xz')
         """
 
+        if turb_loc is None:
+            try:
+                turb_loc = self.turb_loc
+            except ValueError:
+                print("No turb_loc and/or diameter was defined. Please run 'set_turbine_whereabouts' first or provide inputs 'turb_loc' and 'D'.")
+
+        if D is None:
+            try:
+                D = self.D
+            except ValueError:
+                print("No turb_loc and/or diameter was defined. Please run 'set_turbine_whereabouts' first or provide inputs 'turb_loc' and 'D'.")
+
         if ax is None: ax=plt.gca()
         angle = angle/180*np.pi
 
         if plane == 'yz':
-            ax.plot(rot_diam/2*np.sin(np.linspace(0, 2*np.pi,200)),\
-                    hub_height+rot_diam/2*np.cos(np.linspace(0, 2*np.pi,200)),'k-',linewidth=1)
+            ax.plot(turb_loc[0]+D/2*np.sin(np.linspace(0, 2*np.pi,200)),\
+                    turb_loc[1]+D/2*np.cos(np.linspace(0, 2*np.pi,200)),'k-',linewidth=1)
         elif plane == 'xy':
-            ax.plot([turb_loc[0]-rot_diam/2*np.sin(angle),turb_loc[0]+rot_diam/2*np.sin(angle)],\
-                    [turb_loc[1]-rot_diam/2*np.cos(angle),turb_loc[1]+rot_diam/2*np.cos(angle)],'k',linewidth=1.5)
+            ax.plot([turb_loc[0]-D/2*np.sin(angle),turb_loc[0]+D/2*np.sin(angle)],\
+                    [turb_loc[1]-D/2*np.cos(angle),turb_loc[1]+D/2*np.cos(angle)],'k',linewidth=1.5)
         elif plane == 'xz':
-            ax.plot([turb_loc[0]-rot_diam/2*np.sin(angle),turb_loc[0]+rot_diam/2*np.sin(angle)],\
-                    [hub_height+turb_loc[1]-rot_diam/2*np.cos(angle),hub_height+turb_loc[1]+rot_diam/2*np.cos(angle)],'k',linewidth=1.5)
+            ax.plot([turb_loc[0]-D/2*np.sin(angle),turb_loc[0]+D/2*np.sin(angle)],\
+                    [turb_loc[1]-D/2*np.cos(angle),turb_loc[1]+D/2*np.cos(angle)],'k',linewidth=1.5)
 
 
-    def vel_in_wake(self, D, turb_loc = None, z = None, time = None, axis = 'x', component = 'u', verbose = True):
+    def vel_in_wake(self, D = None, turb_loc = None, z = None, time = None, axis = 'x', component = 'u', verbose = True):
         """
         Calculates velocity in the wake of a turbine
         
@@ -613,22 +655,30 @@ class Post_plane:
             Utube (np.array): average wind speed in wake (dimensions: squeeze(num_time_steps, num_x_coor, num_cases) )
         """
 
+        if turb_loc is None:
+            try:
+                turb_loc = self.turb_loc
+            except ValueError:
+                print("No turb_loc and/or diameter was defined. Please run 'set_turbine_whereabouts' first or provide inputs 'turb_loc' and 'D'.")
+
+        if D is None:
+            try:
+                D = self.D
+            except ValueError:
+                print("No turb_loc and/or diameter was defined. Please run 'set_turbine_whereabouts' first or provide inputs 'turb_loc' and 'D'.")
+
         radius = D/2
 
-        if turb_loc is None: turb_loc = [np.average(self.x), np.average(self.y), self.z[0]]
         if z is None: z = turb_loc[2]
 
-        if axis == 'x':
+        if (axis == 'x') or (axis == 'y'):
             xyrange = self.y[np.where((self.y-turb_loc[1])**2 + (z-turb_loc[2])**2 < radius**2)]
-            return np.average(self.get_line_from_plane(xyrange, time, turb_loc[2], axis, component, verbose), axis=1)
-        elif axis == 'y':
-            xyrange = self.x[np.where((self.x-turb_loc[0])**2 + (z-turb_loc[2])**2 < radius**2)]
             return np.average(self.get_line_from_plane(xyrange, time, turb_loc[2], axis, component, verbose), axis=1)
         else:
             return self.mean_vel_in_circle(turb_loc, D, z, time, component, verbose)
 
 
-    def mean_vel_in_wake(self, D, turb_loc = None, z = None, timespan = None, axis = 'x', component = 'u', verbose = True):
+    def mean_vel_in_wake(self, D = None, turb_loc = None, z = None, timespan = None, axis = 'x', component = 'u', verbose = True):
         """
         Calculates average velocity in the wake of a turbine
 
@@ -642,7 +692,6 @@ class Post_plane:
             Utube (np.array): average wind speed in wake (dimensions: squeeze(num_time_steps, num_x_coor, num_cases) )
         """
 
-        if z is None: z = self.z
         if np.size(z) > 1:
             mean_vel = []
             for zi in z:
@@ -653,13 +702,19 @@ class Post_plane:
         return mean_vel
 
 
-    def plot_vel_in_wake(self, D, turb_loc = [0,0,0], z = None, timespan = None, axis = 'x', component = 'u', ax = None, linestyle = '-', color = None, verbose = False):
+    def plot_vel_in_wake(self, D = None, turb_loc = None, z = None, timespan = None, axis = 'x', component = 'u', ax = None, linestyle = '-', color = None, verbose = False):
         """
         Plots average velocity in the wake using mean_vel_in_wake
 
         Additional arg in:
             ax: axis to plot on, default: None (creates new figure)
         """
+
+        if turb_loc is None:
+            try:
+                turb_loc = self.turb_loc
+            except ValueError:
+                print("No turb_loc and/or diameter was defined. Please run 'set_turbine_whereabouts' first or provide inputs 'turb_loc' and 'D'.")
 
         line = self.mean_vel_in_wake(D, turb_loc, z, timespan, axis, component, verbose)
 
@@ -682,6 +737,106 @@ class Post_plane:
         ax.grid(True)
 
         return line
+
+
+    def get_virtual_turbine_power(self, D = None, turb_loc = None, x = None, y = None, z = None, timespan = None, axis = 'x', \
+                                  output = 'power', cp = 1, power_T1 = 0, density = 1.225, component = 'u', verbose = False):
+        """
+        Outputs the rotor-averaged wind speed or power available to a "virtual" turbine based on a provided flow field.
+            output (str): 'power' or 'speed' to output power or wind speed
+            axis (str): 'x' for streamwise horizontal, 'y' for streamwise vertical, 'z' for cross-section
+        """
+
+        if turb_loc is None:
+            try:
+                turb_loc = self.turb_loc
+            except ValueError:
+                print("No turb_loc and/or diameter was defined. Please run 'set_turbine_whereabouts' first or provide inputs 'turb_loc' and 'D'.")
+
+        if D is None:
+            try:
+                D = self.D
+            except ValueError:
+                print("No turb_loc and/or diameter was defined. Please run 'set_turbine_whereabouts' first or provide inputs 'turb_loc' and 'D'.")
+
+        if x is None: 
+            if axis == 'z': x = self.x
+            else: x = turb_loc[0]
+        if y is None: 
+            if axis == 'z': y = turb_loc[1]
+            else: y = self.y
+        if z is None:
+            if axis == 'z': z = self.z
+            else: z = turb_loc[2]
+
+        X = np.array(np.meshgrid(x, y, z)).reshape((3, np.size(x)*np.size(y)*np.size(z)))
+
+        field = []
+        for xi, yi, zi in zip(X[0][:], X[1][:], X[2][:]):
+            field.append(self.mean_vel_in_wake(D, [xi, yi, turb_loc[2]], zi, timespan, axis, component, verbose))
+
+        field = np.array(field)
+        if output == 'power':
+            try:
+                field = 0.5*density*(np.pi*(self.real_D/2)**2)*field**3*cp+power_T1
+            except:
+                field = 0.5*density*(np.pi*(D/2)**2)*field**3*cp+power_T1
+        
+        if (axis == 'z') and (np.size(z) > 1):
+            field = np.reshape(field, (len(z), len(x)), order='F')
+
+        return field
+    
+
+    def plot_virtual_turbine_field(self, field, D = None, turb_loc = None, angle = 0, plane = 'xy', x = None, y = None,\
+                                    baseline_field = None, contour_levels = None, filter_order = 2, vmin = None, vmax = None, ax = None, verbose = False):
+        """
+        Plots the power/wind speed experienced by a "virtual turbine", possibly with respect to a baseline case.
+        """
+
+        if np.size(field) == 1: field = self.get_virtual_turbine_power(D, turb_loc, x, y, z = field, verbose=verbose)
+        if x is None: x = self.x
+        if y is None: y = self.y
+
+        if baseline_field is None: baseline_field = np.ones_like(field)
+
+        if ax is None: fig, ax = plt.subplots()
+        else: fig = plt.gcf()
+
+        if len(np.shape(field)) > 1:
+            im = ax.pcolor(x, y, field/baseline_field, vmin=vmin, vmax=vmax)
+            ax.set_aspect('equal')
+            ax.set_xlabel(f'X {self.unit}')
+            ax.set_xlabel(f'Y {self.unit}')
+            if contour_levels is not None:
+                cs = ax.contour(x, y, gaussian_filter(field/baseline_field, filter_order), colors = 'k', levels=contour_levels, linewidths = .5)
+                fmt = {}
+                for l, s in zip(cs.levels, contour_levels):
+                    fmt[l] = f"{(s-1)*100:.0f}"+'%'
+                    if fmt[l].endswith("0"):
+                        fmt[l] = f"{fmt[l]:.0f}"
+                ax.clabel(cs, cs.levels, inline=True, fmt=fmt)
+            ax.grid(linestyle = ':')
+            # fig.colorbar(im, ax=ax, location='bottom')
+            if turb_loc is not None:
+                try:
+                    self.plot_turbine(D, turb_loc, angle, ax, plane)
+                except:
+                    self.plot_turbine(None, None, angle, ax, plane)
+
+            # ym, xm = np.where(field/baseline_field == (field/baseline_field).max())
+            # ax.plot(x[xm], y[ym], 'kx')
+            # ax.set_xlabel(f'X [{self.unit}]')
+            # ax.set_ylabel(f'Y [{self.unit}]')
+
+        else:
+            try:
+                ax.plot(x, field)
+            except:
+                ax.plot(y, field)
+            ax.grid(True)
+            ax.set_xlabel(f'X [{self.unit}]')
+            ax.set_ylabel(f'Wind speed [m/s]')           
 
 
     def periodic_averaging(self, signal, num_bins, period, poi=None, amplitude=None, offset=0):
