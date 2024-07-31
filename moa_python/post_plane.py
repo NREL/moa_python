@@ -45,9 +45,12 @@ class Post_plane:
 
         # Save the velocity planes
         self.vel_planes = dict()
-        self.vel_planes['x'] = np.array(self.dataset.groups[self.plane[0]].variables['velocityx'][indices,:])
-        self.vel_planes['y'] = np.array(self.dataset.groups[self.plane[0]].variables['velocityy'][indices,:])
-        self.vel_planes['z'] = np.array(self.dataset.groups[self.plane[0]].variables['velocityz'][indices,:])
+        self.vel_planes['x'] = np.array(self.dataset.groups[self.plane[0]].variables['velocityx'][indices,:]).reshape(
+                                            self.num_time_steps, len(self.z), self.y_N, self.x_N)
+        self.vel_planes['y'] = np.array(self.dataset.groups[self.plane[0]].variables['velocityy'][indices,:]).reshape(
+                                            self.num_time_steps, len(self.z), self.y_N, self.x_N)
+        self.vel_planes['z'] = np.array(self.dataset.groups[self.plane[0]].variables['velocityz'][indices,:]).reshape(
+                                            self.num_time_steps, len(self.z), self.y_N, self.x_N)
 
         if len(self.plane) > 1:
             self.append_additional_planes(origin, indices)
@@ -77,10 +80,14 @@ class Post_plane:
         """
 
         for plane in self.plane[1:]:
-            self.z = np.append(self.z, self.get_plane_location(origin, plane))
-            self.vel_planes['x'] = np.append(self.vel_planes['x'], np.array(self.dataset.groups[plane].variables['velocityx'][indices,:]), axis=1)
-            self.vel_planes['y'] = np.append(self.vel_planes['y'], np.array(self.dataset.groups[plane].variables['velocityy'][indices,:]), axis=1)
-            self.vel_planes['z'] = np.append(self.vel_planes['z'], np.array(self.dataset.groups[plane].variables['velocityz'][indices,:]), axis=1)
+            z_new = self.get_plane_location(origin, plane)
+            self.z = np.append(self.z, z_new)
+            self.vel_planes['x'] = np.append(self.vel_planes['x'], np.array(self.dataset.groups[plane].variables['velocityx'][indices,:].reshape(
+                                            self.num_time_steps, len(z_new), self.y_N, self.x_N)), axis=1)
+            self.vel_planes['y'] = np.append(self.vel_planes['y'], np.array(self.dataset.groups[plane].variables['velocityy'][indices,:].reshape(
+                                            self.num_time_steps, len(z_new), self.y_N, self.x_N)), axis=1)
+            self.vel_planes['z'] = np.append(self.vel_planes['z'], np.array(self.dataset.groups[plane].variables['velocityz'][indices,:].reshape(
+                                            self.num_time_steps, len(z_new), self.y_N, self.x_N)), axis=1)
 
 
     def flip_planes(self, axis):
@@ -88,22 +95,10 @@ class Post_plane:
         Flips planes around a specified axis 'x' and/or 'y'.
         """
 
-        plane_x = self.vel_planes['x'].reshape(self.num_time_steps, self.z_N, self.y_N, self.x_N)
-        plane_y = self.vel_planes['y'].reshape(self.num_time_steps, self.z_N, self.y_N, self.x_N)
-        plane_z = self.vel_planes['z'].reshape(self.num_time_steps, self.z_N, self.y_N, self.x_N)
-
-        if 'x' in axis:
-            plane_x = np.flip(plane_x, axis=3)
-            plane_y = np.flip(plane_y, axis=3)
-            plane_z = np.flip(plane_z, axis=3)
-        if 'y' in axis:
-            plane_x = np.flip(plane_x, axis=2)
-            plane_y = np.flip(plane_y, axis=2)
-            plane_z = np.flip(plane_z, axis=2)
-
-        self.vel_planes['x'] = plane_x.reshape(self.num_time_steps, self.z_N*self.y_N*self.x_N)
-        self.vel_planes['y'] = plane_y.reshape(self.num_time_steps, self.z_N*self.y_N*self.x_N)
-        self.vel_planes['z'] = plane_z.reshape(self.num_time_steps, self.z_N*self.y_N*self.x_N)
+        self.vel_planes['x'] = np.flip(self.vel_planes['x'], axis='0zyx'.find(axis))
+        self.vel_planes['y'] = np.flip(self.vel_planes['y'], axis='0zyx'.find(axis))
+        self.vel_planes['z'] = np.flip(self.vel_planes['z'], axis='0zyx'.find(axis))
+        self.vel_planes['u'] = np.flip(self.vel_planes['u'], axis='0zyx'.find(axis))
 
 
     def set_turbine_whereabouts(self, D, turb_loc):
@@ -120,7 +115,7 @@ class Post_plane:
         Return the location of a plane in the third dimension of the defined coordinate system.
 
         Args in:
-            reference (list??): x, y and z-coordinates in AMR-Wind grid w.r.t. which to calculate plane location, default: [0, 0, 0]
+            reference (array): x, y and z-coordinates in AMR-Wind grid w.r.t. which to calculate plane location, default: [0, 0, 0]
         """
         if plane is None: plane = self.plane
         if isinstance(plane, (list, tuple, np.ndarray)): 
@@ -128,9 +123,9 @@ class Post_plane:
             plane = plane[0]
         if reference is None: reference = 0
         reference = sum((self.dataset.groups[plane].origin-reference)*self.z_dir)
-        self.z = reference + self.dataset.groups[plane].offsets
+        z = reference + self.dataset.groups[plane].offsets
 
-        return self.z
+        return z
 
 
     def get_plane_index(self, z, plane = 'z', verbose = True):
@@ -198,7 +193,7 @@ class Post_plane:
 
         if verbose: print(f"Returning {component} velocity plane for slice at {self.z[z_idx]} at time {self.time[t_idx]}")
 
-        return np.squeeze(self.vel_planes[component][t_idx, :][z_idx*self.x_N*self.y_N:(z_idx+1)*self.x_N*self.y_N].reshape(np.size(t_idx),self.y_N,self.x_N))
+        return self.vel_planes[component][t_idx, z_idx, :, :]#np.squeeze(self.vel_planes[component][t_idx, :][z_idx*self.x_N*self.y_N:(z_idx+1)*self.x_N*self.y_N].reshape(np.size(t_idx),self.y_N,self.x_N))
 
 
     def get_mean_plane(self, plane, component = 'u', timespan = None, verbose = True):
@@ -223,17 +218,9 @@ class Post_plane:
             timespan = [self.time[0], self.time[-1]]
         i0 = self.get_time_index(timespan[0], verbose = verbose)
         iend = self.get_time_index(timespan[1], verbose = verbose)
-        mean_plane = np.mean(self.vel_planes[component][i0:iend,:], axis=0)
+        mean_plane = np.mean(self.vel_planes[component][i0:iend,z_idx,:,:], axis=0)
 
-        return mean_plane[z_idx*self.x_N*self.y_N:(z_idx+1)*self.x_N*self.y_N].reshape(self.y_N,self.x_N)
-        
-
-    # def mirror_plane(self, axis='x'):
-    #     """
-    #     Mirrors a plane about a defined axis.
-    #     """
-
-    #     setattr(self, axis, getattr(self, axis)[::-1])
+        return mean_plane
     
 
     def get_vorticity(self, plane, time, orientation = 'xy', verbose=False):
@@ -274,7 +261,7 @@ class Post_plane:
                 (np.diff(u,axis=len(np.shape(u))-2).T/np.diff(self.y)[:, np.newaxis]).T[:,:,0:-1], axis=0)
     
 
-    def get_line_from_plane(self, y, time = None, z = 0, axis = 'x', component = 'u', verbose = True):
+    def get_line_from_plane(self, y, time = None, z = [0], axis = 'x', component = 'u', verbose = True):
         """
         Outputs the velocity over a line
         Args in:
@@ -286,24 +273,25 @@ class Post_plane:
         Args out:
             line (array): velocity over the defined line
         """
+
         if len(np.shape(y)) == 0: y = [y]
+        if len(np.shape(z)) == 0: z = [z]
 
         if axis == 'x': 
-            idx_x = np.arange(0,self.x_N)
-            idx_y = self.get_plane_index(y, 'y', verbose)
+            x_idx = np.arange(self.x_N)
+            y_idx = self.get_plane_index(y, 'y', verbose)
         if axis == 'y':
-            idx_x = self.get_plane_index(y, 'x', verbose)
-            idx_y = np.arange(0,self.y_N)
+            x_idx = self.get_plane_index(y, 'x', verbose)
+            y_idx = np.arange(self.y_N)
         
-        idx_z = self.get_plane_index(z, verbose = verbose)
+        z_idx = self.get_plane_index(z, verbose = verbose)
         if time is None:
-            t_idx = np.arange(0, self.num_time_steps)
+            t_idx = np.arange(self.num_time_steps)
         else:
             if np.size(time) == 1: t_idx = [self.get_time_index(time, verbose = verbose)]
             else: t_idx = np.arange(self.get_time_index(time[0], verbose = verbose), self.get_time_index(time[-1], verbose = verbose)+1)
 
-        return np.squeeze(self.vel_planes[component][t_idx, idx_z*self.x_N*self.y_N:(idx_z+1)*self.x_N*self.y_N]\
-                    .reshape(np.size(t_idx),self.y_N,self.x_N)[np.ix_(np.arange(np.size(t_idx)),idx_y,idx_x)])
+        return np.squeeze(self.vel_planes[component][np.ix_(t_idx, z_idx, y_idx, x_idx)])
 
 
     def mean_vel_in_circle(self, origin = None, D = None, z = None, time = None, component = 'u', verbose = True):
@@ -328,7 +316,7 @@ class Post_plane:
 
         if time is None:
             time = self.time
-            t_idx = np.arange(0, self.num_time_steps)
+            t_idx = np.arange(self.num_time_steps)
         elif np.size(time) == 1: 
             t_idx = np.arange(self.get_time_index(time, verbose = verbose), self.num_time_steps)
         else: t_idx = np.arange(self.get_time_index(time[0], verbose = verbose), self.get_time_index(time[-1], verbose = verbose))
@@ -339,7 +327,7 @@ class Post_plane:
         x_coor, y_coor = np.meshgrid(self.x, self.y)
         idx = np.squeeze(np.where((np.reshape(x_coor,-1)-origin[0])**2 + (np.reshape(y_coor,-1)-origin[1])**2 < (D/2)**2))
  
-        return np.average(self.vel_planes[component][np.ix_(t_idx, z_idx*self.x_N*self.y_N+idx)], axis=1)
+        return np.average(self.vel_planes[component].reshape(self.num_time_steps, -1)[np.ix_(t_idx, z_idx*self.x_N*self.y_N+idx)], axis=1)
 
 
     def get_mean_line_from_plane(self, y, timespan = None, z = 0, axis = 'x', component = 'u', verbose = True):
@@ -806,8 +794,8 @@ class Post_plane:
         if len(np.shape(field)) > 1:
             im = ax.pcolor(x, y, field/baseline_field, vmin=vmin, vmax=vmax)
             ax.set_aspect('equal')
-            ax.set_xlabel(f'X {self.unit}')
-            ax.set_xlabel(f'Y {self.unit}')
+            ax.set_xlabel(f'X [{self.unit}]')
+            ax.set_ylabel(f'Y [{self.unit}]')
             if contour_levels is not None:
                 cs = ax.contour(x, y, gaussian_filter(field/baseline_field, filter_order), colors = 'k', levels=contour_levels, linewidths = .5)
                 fmt = {}
