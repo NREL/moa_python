@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import netCDF4 as ncdf
 from scipy.optimize import curve_fit
 from scipy.ndimage import gaussian_filter
+from scipy.signal import fftconvolve
 
 class Post_plane:
     """
@@ -24,11 +25,29 @@ class Post_plane:
         self.time = np.array(self.dataset.variables['time'][indices])
         self.num_time_steps = len(self.time)
 
-        # Save the x and y dimensions
+        # Get the right planes
         if planes is None:
-            self.plane = list(self.dataset.groups.keys())
-        elif isinstance(planes, str): 
-            self.plane = list(planes)
+            planes = list(self.dataset.groups.keys())
+        elif isinstance(planes, (str, float, int)): 
+            planes = [planes]
+        self.plane = planes
+        if isinstance(self.plane[0], (float, int)):
+            ## TODO: make compatible for multiple planes (or at least give warning if at multiple planes)
+            planes = []
+            z, l = self.get_plane_location(origin, list(self.dataset.groups.keys()), in_plane=True)
+            z_idx = []
+            for n in range(len(self.plane)):
+                z_ind = np.argmin(abs(z-self.plane[n]))
+                planes = [list(self.dataset.groups.keys())[np.where(z_ind < np.cumsum(l[1:]))[0][0]]]
+                if verbose: print(f"Closest plane to {self.plane[n]} is at {z[z_ind]}")
+                z_idx.append(int(z_ind - np.cumsum(l)[np.where(z_ind >= np.cumsum(l))[0][-1]]))
+            self.plane = planes
+            self.z = self.get_plane_location(origin, self.plane[0])
+        else: 
+            self.z = self.get_plane_location(origin, self.plane[0])
+            z_idx = np.arange(len(self.z))
+
+        # Save the x and y dimensions
         self.x_N = self.dataset.groups[self.plane[0]].ijk_dims[0]
         self.y_N = self.dataset.groups[self.plane[0]].ijk_dims[1]
         self.x_max = np.sqrt(sum(entry**2 for entry in self.dataset.groups[self.plane[0]].axis1))
@@ -40,23 +59,21 @@ class Post_plane:
         self.y = np.linspace(0, self.y_max, self.y_N)
         self.unit = 'm'
 
-        # Save the number of planes 
-        self.z = self.get_plane_location(origin, self.plane[0])
-
         # Save the velocity planes
         self.vel_planes = dict()
         self.vel_planes['x'] = np.array(self.dataset.groups[self.plane[0]].variables['velocityx'][indices,:]).reshape(
-                                            self.num_time_steps, len(self.z), self.y_N, self.x_N)
+                                            self.num_time_steps, np.size(self.z), self.y_N, self.x_N)[:,z_idx,:,:]
         self.vel_planes['y'] = np.array(self.dataset.groups[self.plane[0]].variables['velocityy'][indices,:]).reshape(
-                                            self.num_time_steps, len(self.z), self.y_N, self.x_N)
+                                            self.num_time_steps, np.size(self.z), self.y_N, self.x_N)[:,z_idx,:,:]
         self.vel_planes['z'] = np.array(self.dataset.groups[self.plane[0]].variables['velocityz'][indices,:]).reshape(
-                                            self.num_time_steps, len(self.z), self.y_N, self.x_N)
+                                            self.num_time_steps, np.size(self.z), self.y_N, self.x_N)[:,z_idx,:,:]
+
+        self.z = self.z[z_idx]
+        if not isinstance(self.z,np.ndarray): self.z = np.array([self.z])
+        self.z_N = len(self.z)
 
         if len(self.plane) > 1:
             self.append_additional_planes(origin, indices)
-
-        if not isinstance(self.z,np.ndarray): self.z = np.array([self.z])
-        self.z_N = len(self.z)
 
         if flip: self.flip_planes(flip)
 
@@ -70,7 +87,7 @@ class Post_plane:
         Print out a brief summary of the plane
         """
         
-        print(f"Plane has {self.z_N} plane(s) in {self.num_time_steps} time steps from {np.round(self.time[0])} to {np.round(self.time[-1])}")
+        print(f"{self.z_N} plane(s) loaded, with {self.num_time_steps} time steps, from {np.round(self.time[0])} to {np.round(self.time[-1])}")
         print(f"Plane offsets: {self.z}")
 
 
@@ -80,14 +97,17 @@ class Post_plane:
         """
 
         for plane in self.plane[1:]:
+            if (self.dataset.groups[plane].ijk_dims[0] != self.x_N) or (self.dataset.groups[plane].ijk_dims[1] != self.y_N):
+                raise AttributeError(" ".join(f"Plane {plane} does not have the same size ({self.dataset.groups[plane].ijk_dims[0]}, {self.dataset.groups[plane].ijk_dims[1]}) \
+                                        as plane {self.plane[0]} ({self.x_N}, {self.y_N})). Please import planes seperately.".split()))
             z_new = self.get_plane_location(origin, plane)
             self.z = np.append(self.z, z_new)
             self.vel_planes['x'] = np.append(self.vel_planes['x'], np.array(self.dataset.groups[plane].variables['velocityx'][indices,:].reshape(
-                                            self.num_time_steps, len(z_new), self.y_N, self.x_N)), axis=1)
+                                            self.num_time_steps, np.size(z_new), self.y_N, self.x_N)), axis=1)
             self.vel_planes['y'] = np.append(self.vel_planes['y'], np.array(self.dataset.groups[plane].variables['velocityy'][indices,:].reshape(
-                                            self.num_time_steps, len(z_new), self.y_N, self.x_N)), axis=1)
+                                            self.num_time_steps, np.size(z_new), self.y_N, self.x_N)), axis=1)
             self.vel_planes['z'] = np.append(self.vel_planes['z'], np.array(self.dataset.groups[plane].variables['velocityz'][indices,:].reshape(
-                                            self.num_time_steps, len(z_new), self.y_N, self.x_N)), axis=1)
+                                            self.num_time_steps, np.size(z_new), self.y_N, self.x_N)), axis=1)
 
 
     def flip_planes(self, axis):
@@ -110,7 +130,7 @@ class Post_plane:
         self.turb_loc = turb_loc
 
 
-    def get_plane_location(self, reference = None, plane = None):
+    def get_plane_location(self, reference = None, plane = None, in_plane=False):
         """
         Return the location of a plane in the third dimension of the defined coordinate system.
 
@@ -118,14 +138,18 @@ class Post_plane:
             reference (array): x, y and z-coordinates in AMR-Wind grid w.r.t. which to calculate plane location, default: [0, 0, 0]
         """
         if plane is None: plane = self.plane
-        if isinstance(plane, (list, tuple, np.ndarray)): 
-            print(f"WARNING: More than one plane is provided. Outputting location of plane '{plane[0]}'")
-            plane = plane[0]
-        if reference is None: reference = 0
-        reference = sum((self.dataset.groups[plane].origin-reference)*self.z_dir)
-        z = reference + self.dataset.groups[plane].offsets
+        if not isinstance(plane, (list, tuple, np.ndarray)): 
+            plane = [plane]
+        z = np.array([])
+        l = np.array([0])
+        for plane_i in plane:
+            if reference is None: reference = 0
+            ref = sum((self.dataset.groups[plane_i].origin-reference)*self.dataset.groups[plane_i].axis3)
+            z = np.append(z, ref + self.dataset.groups[plane_i].offsets)
+            l = np.append(l, np.size(self.dataset.groups[plane_i].offsets))
 
-        return z
+        if in_plane: return z, l
+        else: return z
 
 
     def get_plane_index(self, z, plane = 'z', verbose = True):
@@ -193,10 +217,10 @@ class Post_plane:
 
         if verbose: print(f"Returning {component} velocity plane for slice at {self.z[z_idx]} at time {self.time[t_idx]}")
 
-        return self.vel_planes[component][t_idx, z_idx, :, :]#np.squeeze(self.vel_planes[component][t_idx, :][z_idx*self.x_N*self.y_N:(z_idx+1)*self.x_N*self.y_N].reshape(np.size(t_idx),self.y_N,self.x_N))
+        return self.vel_planes[component][t_idx, z_idx, :, :]
 
 
-    def get_mean_plane(self, plane, component = 'u', timespan = None, verbose = True):
+    def get_mean_plane(self, plane, timespan = None, component = 'u', verbose = True):
         """
         Get the mean plane at a particular location
         
@@ -504,7 +528,7 @@ class Post_plane:
 
         if verbose: print(f"Plotting {component} mean velocity for plane at location {z}")
 
-        plane = self.get_mean_plane(z, component, timespan = timespan, verbose = verbose)
+        plane = self.get_mean_plane(z, timespan, component, verbose = verbose)
 
         if ax is None:
             fig, ax = plt.subplots()
@@ -1129,15 +1153,14 @@ class Post_plane:
         Fit gaussian wake profile and track centerline along the wake.
         """
 
-        if time is None: time = self.time[-1]
         if x is None: x = getattr(self,'xy'['yx'.find(axis)])
-        idx = np.where(getattr(self, axis) > x0)[0]
+        idx = np.where(getattr(self, axis) >= x0)[0]
         if len(np.shape(plane)) < 2:
             plane = self.get_plane(plane, time, component, verbose)
 
         if bounds is None: bounds = get_gauss_bounds(x, plane, fit)
  
-        p0 = get_gauss_init_guess(x, plane[:,idx[0]], fit, bounds)
+        if axis == 'y': plane = plane.T
         parr = []
 
         for idxi in idx:
@@ -1150,40 +1173,119 @@ class Post_plane:
             parr.append(list(popt))
 
         return np.array(parr)[:,2]
+    
 
-
-    def fit_gauss_2d(self, z, x = None, y = None, p0 = None, fit = 'single', bounds = None, time = None, component = 'u', verbose = False):
+    def get_power_density(self, z, time = None):
         """
-        Fit gaussian wake profile to cross section of wake.
+        Function that returns the power density for (a) given location(s) in the flow field.
+        """
+
+        p = 0.5 * self.get_plane(z, time, component = 'x') * (self.get_plane(z, time, component = 'x')**2 + 
+                                                              self.get_plane(z, time, component = 'y')**2 + 
+                                                              self.get_plane(z, time, component = 'z')**2)
+
+        return p
+
+    def wake_convolution_2d(self, field, gauss_mask = None, x = None, y = None, sigma = None, output = 'center'):
+        """
+        WIP
+        """
+
+        if sigma is None: 
+            try: sigma = self.D/2
+            except: sigma = 0.5
+        if gauss_mask is None: 
+            if x is None:
+                xl = int(np.floor(self.x_N/4))
+                x = self.x[xl:-xl]
+            if y is None: 
+                yl = int(np.floor(self.y_N/4))
+                y = self.y[yl:-yl]
+            gauss_mask = gauss_func_2d(x.ravel(), y.ravel(), 0, -1, np.mean(x), np.mean(y), sigma)
+
+        convolution = fftconvolve(field, gauss_mask, mode='valid')
+
+        if output == 'center':
+            xc, yc = (get_convolution_coordinates(self.x, x), get_convolution_coordinates(self.y, y))
+            X, Y = np.meshgrid(xc, yc)
+            return np.array([X.ravel()[np.argmax(convolution)], Y.ravel()[np.argmax(convolution)]])
+        elif output == 'index':
+            ## TODO make so output is for x, y-index
+            return np.unravel_index(np.argmax(convolution), convolution.shape)
+        elif output == 'conv' or output == 'convolution':
+            xc, yc = (get_convolution_coordinates(self.x, x), get_convolution_coordinates(self.y, y))
+            return convolution, xc, yc
+            
+    
+    def wake_convolution_over_distance(self, field, gauss_mask = None, y = None, x0 = None, sigma = None, axis = 'x', output = 'center'):
+        """
+        WIP
+        """
+
+        if sigma is None: 
+            try: sigma = self.D/2
+            except: sigma = 0.5
+        if x0 is None:
+            try: x0 = self.turb_loc[1]
+            except: x0 = 0
+        if gauss_mask is None: 
+            if y is None:
+                yl = int(np.floor(self.y_N/4))
+                y = self.y[yl:-yl]
+            gauss_mask = gauss_func(y, 0, -1, np.mean(y), sigma)
+        if x is None: x = getattr(self,'xy'['yx'.find(axis)])
+
+        carr = []
+        for idxi in np.where(self.x >= x0):
+            if axis == 'y': field = field.T
+            line = field[:,idxi]
+            convolution = fftconvolve(line, gauss_mask, mode='valid')
+            if output == 'center':
+                yc = get_convolution_coordinates(self.y, y)
+                carr.append(yc[np.argmax(convolution)])
+            elif output == 'index':
+                xc = get_convolution_coordinates(self.y, y)
+                carr.append(xc)
+            elif output == 'conv' or output == 'convolution':
+                carr.append(convolution)
+
+        return carr
+    
+
+    def fit_gauss_mask(self, field, x = None, y = None, x0 = None, y0 = None, p0 = None, bounds = None, verbose = False):
+        """
+        Fit gaussian mask to flow field data. Very much a WIP -- do not use yet!
         """
         
-        if time is None: time = self.time[-1]
-        t_idx = self.get_time_index(time, verbose=verbose)
-        if x is None:
-            x = self.x
-        if y is None:
-            y = self.y
-        if np.size(z) == 1: 
-            z = self.get_plane(z, time, verbose=verbose)
+        
+        if p0 is None: 
+            try:
+                p0 = self.D/2
+            except:
+                p0 = 0.5
+                print('Warning! No initial mask size or turbine diameter defined. Initial guess set at 0.5')
 
-        if p0 is None:
-            v0 = np.max(self.vel_planes['x'])
-            a = np.max(self.vel_planes['x']) - np.min(self.vel_planes['x'])
-            x0 = np.average(x)
-            if self.unit == 'm': y0 = 150
-            else: y0 = 0.625
-            if self.unit == 'm': sigma = 120
-            else: sigma = 1
-            if fit == 'double': p0 = [v0, a, x0, y0, sigma/2, sigma/2]
-            else: p0 = [v0, a, x0, y0, sigma]
-
-        if np.size(x)*np.size(y) == np.size(z):
+        if x is None: x = self.x
+        if y is None: y = self.y
+        if x0 is None: 
+            try: x0 = self.turb_loc[0]
+            except: x0 = 0
+        if y0 is None:
+            try: y0 = self.turb_loc[1]
+            except: y0 = 0
+        if np.size(x)*np.size(y) == np.size(field):
             x, y = np.meshgrid(x, y)
+        if bounds is None: bounds = (0, np.max([np.max(x)-np.min(x), np.max(y)-np.min(y)]) )
             
         try: 
-            popt, pcov = curve_fit(gauss_func_2d, np.vstack((x.ravel(), y.ravel())), z.ravel(), p0, bounds=bounds)
+            popt, pcov = curve_fit(gauss_func_2d, np.vstack((x.ravel(), y.ravel(), 
+                                                             np.ones_like(x.ravel()),
+                                                             np.ones_like(x.ravel()),
+                                                             x0*np.ones_like(x.ravel()),
+                                                             y0*np.ones_like(x.ravel()) )), 
+                                                                field.ravel(), p0, bounds=bounds)
         except:
-            print(f'Warning! Optimal parameters not found at time {time}. Reverted to initial guess.')
+            print('Warning! Optimal parameters not found. Reverted to initial guess.')
             popt = p0
 
         return popt
@@ -1239,12 +1341,12 @@ def gauss_func(x, v0, a, x0, sigma, w = None):
         return v0 - a*np.exp(-(x-x0-w)**2/(2*sigma**2)) - a*np.exp(-(x-x0+w)**2/(2*sigma**2))
 
 
-def gauss_func_2d(X, v0, a, x0, y0, sigma = None, w = None):
+def gauss_func_2d(X, Y, v0, a, x0, y0, sigma_x, sigma_y = None):
     """
     Simple or double gaussian function:
     Single:
         y = v0 - a*exp( -( sqrt((x-x0)^2 + (y-y0))^2 )^2 / (2*sigma^2) )
-    Double:
+    Double (currently n/a):
         v0 - a*np.exp( -( sqrt((x-x0)^2+(y-y0)^2)-w )^2/(2*sigma^2) ) - a*np.exp( -( np.sqrt((x-x0)^2+(y-y0)^2)+w )^2/(2*sigma^2) )
 
     Args in:
@@ -1256,13 +1358,12 @@ def gauss_func_2d(X, v0, a, x0, y0, sigma = None, w = None):
         y (array): Gauss curve
     """
 
-    x = X[:,0]
-    y = X[:,1]
+    if sigma_y is None: sigma_y = sigma_x
 
-    if w is None:
-        return v0 - a*np.exp(-(np.sqrt((x-x0)**2+(y-y0)**2))**2/(2*sigma**2))
-    else: 
-        return v0 - a*np.exp(-(np.sqrt((x-x0)**2+(y-y0)**2)-w)**2/(2*sigma**2)) - a*np.exp(-(np.sqrt((x-x0)**2+(y-y0)**2)+w)**2/(2*sigma**2))
+    if np.size(X) != np.size(Y):
+        x, y = np.meshgrid(X, Y)
+
+    return v0 - a*np.exp(-((x-x0)**2/(2*sigma_x**2)+(y-y0)**2/(2*sigma_y**2)))
 
 
 def get_gauss_init_guess(x, y, fit = 'single', bounds = None):
@@ -1337,3 +1438,26 @@ def find_min_distance(x1, y1, x2, y2):
               np.mean([y1[coordinates[1]], y2[coordinates[0]]])]
     
     return coordinates, values
+
+
+def get_convolution_coordinates(x1, x2):
+    """
+    Returns the x- and y-array for given arrays that are convoluted using "valid" mode.
+    """
+
+    if len(x2) > len(x1):
+        xi = x2
+        x2 = x1
+        x1 = xi
+    xl = int(np.floor(len(x2)/2))
+
+    xc = x1[xl:-xl]
+
+    if len(x2) % 2 != 0: 
+        xc = xc + np.diff(x1[:2])/2
+    
+    return xc
+
+
+
+    

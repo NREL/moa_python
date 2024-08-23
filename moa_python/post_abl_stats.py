@@ -6,7 +6,7 @@ import netCDF4 as ncdf
 
 class Post_abl_stats:
     
-    def __init__(self, filenames):
+    def __init__(self, filenames, verbose=True):
         
         # If only one filename passed in
         # Convert to list for consistency
@@ -31,8 +31,9 @@ class Post_abl_stats:
         self.z = self.get_data_from_mean_profiles('h')
         
         # Print a quick summary
-        self.summary()
+        if verbose: self.summary()
         
+
     def summary(self):
         """
         Print out a brief summary of abl_stats file
@@ -41,6 +42,7 @@ class Post_abl_stats:
         print(f"Object is composed of {self.Nfiles} and time runs from {self.time[0]} to {self.time[-1]}")
         print(self.dataset_list[0])
         
+
     def get_variable_from_abl_stats(self, variablename):
         """
         Reads requested variable from dataset_list and puts data into arrays
@@ -58,6 +60,7 @@ class Post_abl_stats:
 
         return np.squeeze(np.reshape(data,[self.Nfiles, int(len(data)/self.Nfiles)]).T)
         
+
     def get_group_from_abl_stats(self, groupname):
         """
         Reads requested data from dataset_list and puts data into arrays
@@ -76,10 +79,7 @@ class Post_abl_stats:
         return data
     
     
-    def get_data_from_group(self, 
-        group,
-        variable
-    ):
+    def get_data_from_group(self, group, variable):
         """
         Reads requested data from within a group and returns array
 
@@ -108,6 +108,7 @@ class Post_abl_stats:
         shape[N-1] = int(shape[N-1]/self.Nfiles)
 
         return np.reshape(data, shape, 'F')
+
     
     def get_data_from_mean_profiles(self, variable):
         
@@ -124,6 +125,7 @@ class Post_abl_stats:
         """
         return self.get_data_from_group(self.mean_profiles, variable)
     
+
     def time_average_data(self, x, t_min=None, t_max=None):
         
         """
@@ -166,8 +168,9 @@ class Post_abl_stats:
         else:
             data = np.mean(x[t_min_idx:t_max_idx],axis=0)
         
-        # Perform the average and return
+        # Return average
         return data
+
 
     def get_mean_wind_direction_at_heights(self, t_min=None, t_max=None):
         """ 
@@ -188,7 +191,7 @@ class Post_abl_stats:
         self.wd_deg = (270.0 - np.degrees(self.wd_rad)) % 360. # Compass
 
     
-    def plot_vertical_vel_profile(self, t_min=None, t_max=None, ax=None, height=None):
+    def get_vertical_vel_profile(self, t_min=None, t_max=None):
         """
         Plot the vertical velocity profile over an averaging
         period of [t_min, t_max]
@@ -199,14 +202,51 @@ class Post_abl_stats:
             ax (:py:class:'matplotlib.pyplot.axes', optional):
                 figure axes. Defaults to None.
         """
-        if ax is None:
-            fig, ax = plt.subplots()
-            
+
         u = self.get_data_from_mean_profiles('u')
         v = self.get_data_from_mean_profiles('v')
         u_avg = self.time_average_data(u, t_min, t_max)
         v_avg = self.time_average_data(v, t_min, t_max)
-        U_avg = np.sqrt(u_avg**2 + v_avg**2)
+
+        return np.sqrt(u_avg**2 + v_avg**2)
+
+
+    def get_diff_over_height(self, var, hub_height, rot_diam):
+        """
+        Get the wind veer over the rotor swept area (height from hub_height-rot_diam/2 to hub_height+rot_diam/2)
+
+        Args in:
+            hub_height (float): turbine hub height (m)
+            rot_diam (float): turbine rotor diameter (m)
+        """
+
+        # Find time indices within time
+        z_min_idx = int(np.argmax(self.z >= hub_height-rot_diam/2, axis=0))
+        z_max_idx = int(np.argmax(self.z >= hub_height+rot_diam/2, axis=0))
+
+        var_idxd = var[z_min_idx:z_max_idx-1]
+
+        return np.squeeze(np.max(var_idxd) - np.min(var_idxd))*(1+(self.z[z_min_idx]-hub_height+rot_diam/2 + hub_height+rot_diam/2-self.z[z_max_idx-1])/rot_diam)
+
+
+    def plot_vertical_vel_profile(self, t_min=None, t_max=None, ax=None, height=None, rot_diam=None):
+        """
+        Plot the vertical velocity profile over an averaging
+        period of [t_min, t_max]
+
+        Args in:
+            t_min (float): time to start averaging (inclusive)
+            t_max (float): time to stop averaging (non-inclusive)
+            ax (:py:class:'matplotlib.pyplot.axes', optional):
+                figure axes. Defaults to None.
+            height (float): turbine height to show as dashed line in plot
+            rot_diam (float): rotor diameter. If provided together with height,
+                                the shear over rotor diameter will be printed.
+        """
+        if ax is None:
+            fig, ax = plt.subplots()
+            
+        U_avg = self.get_vertical_vel_profile(t_min, t_max)
         
         ax.plot(U_avg, self.z)
         ax.set_xlabel("U m/s")
@@ -217,7 +257,10 @@ class Post_abl_stats:
 
         if height:
             ax.plot([0, xmax],[height, height],'--',color='0.6',label='_nolegend_')
-        
+            if rot_diam:
+                print(f"Shear over rotor plane is {self.get_diff_over_height(U_avg, height, rot_diam)} m/s")
+
+
     def plot_vertical_temp_profile(self, t_min=None, t_max=None, ax=None, height=None):
         """
         Plot the vertical temperature profile over an averaging
@@ -241,19 +284,23 @@ class Post_abl_stats:
         ax.grid(True)
 
         if height:
+            xmax = np.max(u_avg)+1
             ax.plot([0, xmax],[height, height],'--',color='0.6',label='_nolegend_')
 
-    def plot_wind_measurements_at_height(self, height, axarr=None, settling_time=None, label='_nolegend_'):
+
+    def plot_wind_measurements_at_height(self, height, axarr=None, settling_time=None, end_time=None, label='_nolegend_'):
         """
-        Plot ws, wd and the simple cartesian variables of varaiance u'u'_r, v'v'_r, w'w'_r and wind speed
+        Plot ws, wd and the simple cartesian variables of variance u'u'_r, v'v'_r, w'w'_r and wind speed
 
         Args in:
             height (float): the height to extract, if not a value of self.z, will use nearest
             axarr (list?): an array of axis
             settling_time (float): An option value that indicates a proposed setting time
+            end_time (float): An optional value for simulation end time. Prints the average wind speed
+                                over the simulation domain if settling_time is provided too.
 
         Args out:
-            axarr (list?): an array of axis
+            axarr (list): an array of axis
         """
 
         if axarr is None:
@@ -261,6 +308,8 @@ class Post_abl_stats:
 
         ax = axarr[0]
         data = self.get_wind_speed_time_series_at_height(height)
+        if settling_time is not None and end_time is not None:
+            print(f"Mean wind speed over simulation period {settling_time}s-{end_time}s is {self.time_average_data(data, settling_time, end_time)} m/s")
         ax.plot(self.time, data, label=label)
         ax.set_title('Wind Speed')
         ax.grid(True)
@@ -286,8 +335,9 @@ class Post_abl_stats:
         if settling_time is not None:
             for ax in axarr:
                 ax.axvline(settling_time, color='r', ls='--')
+        
 
-    def get_time_series_at_height(self, variable, height):
+    def get_time_series_at_height(self, variable, height, verbose=True):
         """
         Return the values of a variable within the mean_profiles for a specific height
 
@@ -301,7 +351,7 @@ class Post_abl_stats:
         
         # Identify nearest height
         h_idx = np.argmin(np.abs(self.z - height),axis=0)
-        print(f'Nearest height to {height} is {self.z[h_idx][0]}')
+        if verbose: print(f'Nearest height to {height} is {self.z[h_idx][0]}')
         
         # Get the data
         x = self.get_data_from_mean_profiles(variable)
@@ -326,7 +376,8 @@ class Post_abl_stats:
 
         return np.sqrt(u**2 + v**2)
 
-    def get_wind_direction_time_series_at_height(self, height):
+
+    def get_wind_direction_time_series_at_height(self, height, verbose=True):
         """
         Return the wind direction (compass) as a time series
 
@@ -337,8 +388,8 @@ class Post_abl_stats:
             wd_deg (class 'numpy.ndarray'): compass wind direction in degrees
         """
 
-        u = self.get_time_series_at_height('u', height)
-        v = self.get_time_series_at_height('v', height)
+        u = self.get_time_series_at_height('u', height, verbose)
+        v = self.get_time_series_at_height('v', height, verbose)
 
         wd_rad = np.arctan2(v, u) # Defined so 0 positive along x-axis
         wd_deg = (270.0 - np.degrees(wd_rad)) % 360. # Compass
@@ -346,7 +397,7 @@ class Post_abl_stats:
         return wd_deg
 
 
-    def get_vertical_wind_direction_profile(self, t_min=None, t_max=None):
+    def get_vertical_wind_direction_profile(self, t_min=None, t_max=None, verbose=False):
 
         """
         Get the vertical wind direction profile over averaging window [t_min, t_max]
@@ -358,12 +409,12 @@ class Post_abl_stats:
 
         wd = np.squeeze(np.zeros((len(self.z),self.Nfiles)))
         for n in range(len(self.z)):
-            wd[n] = self.time_average_data(self.get_wind_direction_time_series_at_height(self.z[n]),t_min, t_max)
+            wd[n] = self.time_average_data(self.get_wind_direction_time_series_at_height(self.z[n], verbose=verbose), t_min, t_max)
         
         return wd
 
     
-    def plot_wind_direction_profile(self, t_min=None, t_max=None, ax=None, height=None, offset=0):
+    def plot_wind_direction_profile(self, t_min=None, t_max=None, ax=None, height=None, rot_diam=None, offset=0, verbose=False):
         
         """
         Plot the wind direction profile over an averaging
@@ -380,7 +431,7 @@ class Post_abl_stats:
         if ax is None:
             fig, ax = plt.subplots()
 
-        wd = self.get_vertical_wind_direction_profile(t_min, t_max)
+        wd = self.get_vertical_wind_direction_profile(t_min, t_max, verbose)
 
         ax.plot(wd-offset, self.z)
         ax.set_xlabel("Wind direction [deg]")
@@ -392,9 +443,11 @@ class Post_abl_stats:
         
         if height:
             ax.plot([xmin, xmax],[height, height],'--',color='0.6',label='_nolegend_')
+            if rot_diam:
+                print(f"Veer over rotor plane is {self.get_diff_over_height(wd, height, rot_diam)} degrees")
 
 
-    def get_wind_veer(self, hub_height, rot_diam, t_min=None, t_max=None):
+    def get_wind_veer(self, hub_height, rot_diam, t_min=None, t_max=None, verbose=False):
 
         """
         Get the wind veer over the rotor swept area (height from hub_height-rot_diam/2 to hub_height+rot_diam/2)
@@ -410,9 +463,9 @@ class Post_abl_stats:
 
         wd = np.squeeze(np.zeros((int(z_max_idx-z_min_idx),self.Nfiles)))
         for n in range(int(z_max_idx-z_min_idx)):
-            wd[n] = self.time_average_data(self.get_wind_direction_time_series_at_height(self.z[z_min_idx+n]), t_min, t_max)
+            wd[n] = self.time_average_data(self.get_wind_direction_time_series_at_height(self.z[z_min_idx+n], verbose=verbose), t_min, t_max)
 
-        return np.max(wd) - np.min(wd)
+        return self.get_diff_over_height(wd, hub_height, rot_diam)
 
 
     def get_turbulence_intensity_at_height(self, height, t_min=None, t_max=None):
