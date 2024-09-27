@@ -2,6 +2,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import netCDF4 as ncdf
+from scipy.optimize import curve_fit
 
 
 class Post_abl_stats:
@@ -21,14 +22,14 @@ class Post_abl_stats:
             self.dataset_list.append(ncdf.Dataset(filename))
         
         # Read time
-        self.time = self.get_variable_from_abl_stats('time')
+        self.time = np.squeeze(self.get_variable_from_abl_stats('time'))
         self.num_time_steps = len(self.time)
         
         # Save the mean profiles
         self.mean_profiles = self.get_group_from_abl_stats('mean_profiles')
         
         # Save the z-levels
-        self.z = self.get_data_from_mean_profiles('h')
+        self.z = np.squeeze(self.get_data_from_mean_profiles('h'))
         
         # Print a quick summary
         if verbose: self.summary()
@@ -157,7 +158,7 @@ class Post_abl_stats:
         
         # Find time indices within time
         t_min_idx = np.argmax(self.time >= t_min, axis=0)
-        t_max_idx = np.argmax(self.time >= t_max, axis=0)
+        t_max_idx = np.argwhere(self.time <= t_max)[-1][0]
 
         if len(t_min_idx.shape):
             data = []
@@ -209,9 +210,35 @@ class Post_abl_stats:
         v_avg = self.time_average_data(v, t_min, t_max)
 
         return np.sqrt(u_avg**2 + v_avg**2)
+    
+
+    def get_shear(self, hub_height, rot_diam, t_min=None, t_max=None, verbose=True):
+        """
+        Returns the shear over the rotor plane.
+        """
+
+        # Get vertical profile
+        U = self.get_vertical_vel_profile(t_min, t_max)
+
+        # Find time indices within time
+        z_min_idx = int(np.argmax(self.z >= hub_height-rot_diam/2, axis=0))
+        z_max_idx = int(np.argmax(self.z >= hub_height+rot_diam/2, axis=0))
+
+        U_rot = U[z_min_idx:z_max_idx]
+
+        def shear_profile(z, alpha):
+            h_idx = np.argmin(abs(self.z-hub_height))
+            U_hub = U[h_idx]
+            return np.squeeze(U_hub*(z/self.z[h_idx])**alpha)
+
+        alpha, cov = curve_fit(shear_profile, np.squeeze(self.z[z_min_idx:z_max_idx]), np.squeeze(U_rot), p0 = 0.14)
+        wsdelta = self.get_diff_over_height(U, hub_height, rot_diam)
+
+        if verbose: print(f"Shear component is {np.squeeze(alpha)}, WS delta is {np.squeeze(wsdelta)} m/s")
+        else: return alpha
 
 
-    def get_diff_over_height(self, var, hub_height, rot_diam):
+    def get_diff_over_height(self, var, hub_height, rot_diam, z = None):
         """
         Get the wind veer over the rotor swept area (height from hub_height-rot_diam/2 to hub_height+rot_diam/2)
 
@@ -219,6 +246,9 @@ class Post_abl_stats:
             hub_height (float): turbine hub height (m)
             rot_diam (float): turbine rotor diameter (m)
         """
+
+        if z is None:
+            z = self.z
 
         # Find time indices within time
         z_min_idx = int(np.argmax(self.z >= hub_height-rot_diam/2, axis=0))
@@ -351,13 +381,13 @@ class Post_abl_stats:
         
         # Identify nearest height
         h_idx = np.argmin(np.abs(self.z - height),axis=0)
-        if verbose: print(f'Nearest height to {height} is {self.z[h_idx][0]}')
+        if verbose: print(f'Nearest height to {height} is {self.z[h_idx]}')
         
         # Get the data
         x = self.get_data_from_mean_profiles(variable)
         
         # Return at height
-        return np.squeeze(x[:,h_idx[0]])
+        return np.squeeze(x[:,h_idx])
     
 
     def get_wind_speed_time_series_at_height(self, height):

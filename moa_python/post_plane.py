@@ -21,7 +21,7 @@ class Post_plane:
         self.dataset = ncdf.Dataset(filename)
         
         # Read time
-        indices = np.arange(0,self.dataset.dimensions['num_time_steps'].size, freq)
+        indices = np.arange(0, self.dataset.dimensions['num_time_steps'].size, freq)
         self.time = np.array(self.dataset.variables['time'][indices])
         self.num_time_steps = len(self.time)
 
@@ -67,6 +67,7 @@ class Post_plane:
                                             self.num_time_steps, np.size(self.z), self.y_N, self.x_N)[:,z_idx,:,:]
         self.vel_planes['z'] = np.array(self.dataset.groups[self.plane[0]].variables['velocityz'][indices,:]).reshape(
                                             self.num_time_steps, np.size(self.z), self.y_N, self.x_N)[:,z_idx,:,:]
+        self.resampled = False
 
         self.z = self.z[z_idx]
         if not isinstance(self.z,np.ndarray): self.z = np.array([self.z])
@@ -75,10 +76,10 @@ class Post_plane:
         if len(self.plane) > 1:
             self.append_additional_planes(origin, indices)
 
-        if flip: self.flip_planes(flip)
-
         self.vel_planes['u'] = np.sqrt(self.vel_planes['x']**2 + self.vel_planes['y']**2)
-        
+
+        if flip: self.flip_planes(flip)
+                
         # Print a quick summary
         if verbose: self.summary()
         
@@ -89,6 +90,33 @@ class Post_plane:
         
         print(f"{self.z_N} plane(s) loaded, with {self.num_time_steps} time steps, from {np.round(self.time[0])} to {np.round(self.time[-1])}")
         print(f"Plane offsets: {self.z}")
+
+    
+    def resample_plane(self, fx = 1, fy = 1, ft = 1):
+        """
+        Applies sampling of the planes. Inputs:
+            fx: spatial sampling frequency on x-axis
+            fy: spatial sampling frequency on y-axis
+            ft: temporal sampling
+
+            WIP!!
+        """
+
+        if not self.resampled: 
+            self.x = self.x[0::fx]
+            self.y = self.y[0::fy]
+            self.time = self.time[0::ft]
+            self.x_N = len(self.x)
+            self.y_N = len(self.y)
+            self.num_time_steps = len(self.time)
+            self.vel_planes['x'] = self.vel_planes['x'][0::ft, :, 0::fy, 0::fx]
+            self.vel_planes['y'] = self.vel_planes['y'][0::ft, :, 0::fy, 0::fx]
+            self.vel_planes['z'] = self.vel_planes['z'][0::ft, :, 0::fy, 0::fx]
+            self.vel_planes['u'] = self.vel_planes['u'][0::ft, :, 0::fy, 0::fx]
+            self.resampled = True
+        else: 
+            print('WARNING: planes have already been resampled--no new resampling performed.')
+            print('If you want to proceed regardless, set self.resampled = False')
 
 
     def append_additional_planes(self, origin, indices):
@@ -318,7 +346,7 @@ class Post_plane:
         return np.squeeze(self.vel_planes[component][np.ix_(t_idx, z_idx, y_idx, x_idx)])
 
 
-    def mean_vel_in_circle(self, origin = None, D = None, z = None, time = None, component = 'u', verbose = True):
+    def vel_in_circle(self, origin = None, D = None, z = None, time = None, component = 'u', verbose = True):
         """
         Outputs the mean velocity over an area of the flow field
         Args in:
@@ -345,13 +373,24 @@ class Post_plane:
             t_idx = np.arange(self.get_time_index(time, verbose = verbose), self.num_time_steps)
         else: t_idx = np.arange(self.get_time_index(time[0], verbose = verbose), self.get_time_index(time[-1], verbose = verbose))
 
+        if np.size(t_idx) == 0:
+            raise AttributeError(f'Provided time or timespan {time} does not lie within dataset {self.time[0]}-{self.time[-1]}')
+
         if z is None: z_idx = 0
         else: z_idx = self.get_plane_index(z, verbose = verbose)
 
         x_coor, y_coor = np.meshgrid(self.x, self.y)
         idx = np.squeeze(np.where((np.reshape(x_coor,-1)-origin[0])**2 + (np.reshape(y_coor,-1)-origin[1])**2 < (D/2)**2))
+
+        ##
+        vel_in_circ = []
+        ix = np.vstack([np.floor(idx/len(self.x)), idx % len(self.x)])
+        for i in range(len(idx)):
+            vel_in_circ.append(self.vel_planes[component][t_idx, z_idx, int(ix[0,i]), int(ix[1,i])])
+
+        return np.mean(vel_in_circ, axis=0)
  
-        return np.average(self.vel_planes[component].reshape(self.num_time_steps, -1)[np.ix_(t_idx, z_idx*self.x_N*self.y_N+idx)], axis=1)
+        # return np.average(self.vel_planes[component].reshape(self.num_time_steps, -1)[np.ix_(t_idx, z_idx*self.x_N*self.y_N+idx)], axis=1)
 
 
     def get_mean_line_from_plane(self, y, timespan = None, z = 0, axis = 'x', component = 'u', verbose = True):
@@ -687,7 +726,7 @@ class Post_plane:
             xyrange = self.y[np.where((self.y-turb_loc[1])**2 + (z-turb_loc[2])**2 < radius**2)]
             return np.average(self.get_line_from_plane(xyrange, time, turb_loc[2], axis, component, verbose), axis=1)
         else:
-            return self.mean_vel_in_circle(turb_loc, D, z, time, component, verbose)
+            return self.vel_in_circle(turb_loc, D, z, time, component, verbose)
 
 
     def mean_vel_in_wake(self, D = None, turb_loc = None, z = None, timespan = None, axis = 'x', component = 'u', verbose = True):
